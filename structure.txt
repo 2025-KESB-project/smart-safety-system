@@ -1,0 +1,34 @@
+.
+├── README.md
+├── control
+│   ├── alert_controller.py
+│   ├── power_controller.py
+│   ├── speed_controller.py
+│   └── warning_device.py
+├── detect
+│   └── detector.py
+├── docs
+│   ├── README.md
+│   └── test.md
+├── frontend
+│   └── src
+├── input_adapter
+│   ├── preprocess.py
+│   ├── sensor.py
+│   └── stream.py
+├── logic
+│   ├── mode_manager.py
+│   ├── risk_evaluator.py
+│   └── rule_engine.py
+├── scripts
+├── server
+│   ├── app.py
+│   ├── config.py
+│   ├── models
+│   ├── routes
+│   └── services
+├── structure.txt
+└── test
+    └── ai_model
+
+15 directories, 17 files

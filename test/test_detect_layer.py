@@ -6,7 +6,7 @@ from loguru import logger
 # 상위 디렉터리의 모듈을 가져오기 위한 경로 설정
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
-from detect.detector import Detector
+from detect.detect_facade import Detector
 from detect.danger_zone_creator import ZoneCreator
 
 # --- 설정 ---

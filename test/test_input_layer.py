@@ -1,5 +1,5 @@
 import cv2
-from input_adapter.adapter import InputAdapter
+from input_adapter.input_facade import InputAdapter
 
 def main():
     adapter = InputAdapter(camera_index=3)

@@ -1,0 +1,35 @@
+# Core dependencies
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart==0.0.6
+websockets==12.0
+
+# Computer Vision
+opencv-python==4.8.1.78
+opencv-contrib-python==4.8.1.78
+numpy==1.24.3
+Pillow==10.0.1
+
+# AI/ML
+torch==2.1.0
+torchvision==0.16.0
+ultralytics==8.0.196
+mediapipe==0.10.7
+
+# Database
+sqlalchemy==2.0.23
+alembic==1.12.1
+
+# GPIO (for Raspberry Pi)
+RPi.GPIO==0.7.1
+
+# Utilities
+python-dotenv==1.0.0
+pydantic==2.5.0
+loguru==0.7.2
+asyncio-mqtt==0.16.1
+
+# Development
+pytest==7.4.3
+black==23.11.0
+flake8==6.1.0 

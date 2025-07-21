@@ -61,7 +61,7 @@ class PoseDetector:
             detected_poses.append({
                 "person_id": i,
                 "bbox": bbox.tolist(),
-                "keypoints": {name: kp.tolist() for name, (kp, conf) in keypoints_map.items() if conf > 0.5},
+                "keypoints": {name: kp.tolist() for name, (kp, conf) in keypoints_map.items() if conf > 0.4},
                 "analysis": analysis
             })
         

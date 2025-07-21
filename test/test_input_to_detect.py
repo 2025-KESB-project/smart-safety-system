@@ -6,14 +6,14 @@ from loguru import logger
 # 상위 디렉터리의 모듈을 가져오기 위한 경로 설정
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
-from input_adapter.adapter import InputAdapter
-from detect.detector import Detector
+from input_adapter.input_facade import InputAdapter
+from detect.detect_facade import Detector
 
 # --- 설정 ---
 # InputAdapter 설정
 # mock_mode=False로 설정하여 실제 카메라를 사용합니다.
 INPUT_CONFIG = {
-    'camera_index': 3,
+    'camera_index': 0,
     'mock_mode': False
 }
 
