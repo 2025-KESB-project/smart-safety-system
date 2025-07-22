@@ -26,7 +26,7 @@ except ImportError as e:
 # --------------------------------------------------------------------------
 CONFIG = {
     'input': {
-        'camera_index': 0,
+        'camera_index': 3,
         'mock_mode': False  # <<-- 실제 카메라 사용 시 False
     },
     'detector': {
