@@ -1,0 +1,16 @@
+# Core & Web Server
+fastapi
+uvicorn
+pydantic
+loguru
+
+# Computer Vision & AI/ML
+opencv-python
+numpy
+Pillow
+torch
+torchvision
+ultralytics
+
+# GPIO (Optional - for Raspberry Pi deployment)
+# RPi.GPIO
