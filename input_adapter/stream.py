@@ -29,13 +29,13 @@ class VideoStream:
             if not self.cap.isOpened():
                 raise RuntimeError(f"비디오 소스를 열 수 없습니다: {self.source}")
                 
-                # 카메라 설정
-                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
-                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
-                self.cap.set(cv2.CAP_PROP_FPS, self.fps)
-                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # 버퍼 크기 최소화
-                
-                logger.info(f"카메라 초기화 완료: {self.source}, 해상도: {self.resolution}, FPS: {self.fps}")
+            # 카메라 설정
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
+            self.cap.set(cv2.CAP_PROP_FPS, self.fps)
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # 버퍼 크기 최소화
+
+            logger.info(f"카메라 초기화 완료: {self.source}, 해상도: {self.resolution}, FPS: {self.fps}")
                 
         except Exception as e:
             logger.error(f"카메라 초기화 실패: {e}")

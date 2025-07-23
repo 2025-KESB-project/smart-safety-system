@@ -100,7 +100,4 @@ class RiskEvaluator:
         elif total_score >= 40:
             evaluated_risks["risk_level"] = "medium"
         
-        if total_score > 0:
-            logger.warning(f"위험 평가 결과: Level={evaluated_risks['risk_level']}, Score={total_score}")
-            
         return evaluated_risks

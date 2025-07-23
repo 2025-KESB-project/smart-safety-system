@@ -63,7 +63,7 @@ class AlertController:
     def activate_device(self, device: AlertDevice, duration: float, message: str) -> bool:
         """특정 경고 장치를 활성화합니다."""
         with self._lock:
-            logger.info(f"장치 활성화: '{device.value}', 지속 시간: {duration}초, 메시지: '{message}'")
+            # logger.info(f"장치 활성화: '{device.value}', 지속 시간: {duration}초, 메시지: '{message}'")
             self.device_status[device] = {
                 "status": "active",
                 "start_time": time.time(),
@@ -72,7 +72,8 @@ class AlertController:
             }
 
             if self.mock_mode:
-                logger.info(f"모의 모드: 장치 '{device.value}' 활성화됨.")
+                pass
+                # logger.info(f"모의 모드: 장치 '{device.value}' 활성화됨.")
             else:
                 # 실제 장치 제어 로직 구현 (예: GPIO 제어)
                 pass
@@ -85,12 +86,9 @@ class AlertController:
         """특정 경고 장치를 비활성화합니다."""
         with self._lock:
             if self.device_status[device]["status"] == "active":
-                logger.info(f"장치 비활성화: '{device.value}'")
                 self.device_status[device] = {"status": "idle"}
                 
-                if self.mock_mode:
-                    logger.info(f"모의 모드: 장치 '{device.value}' 비활성화됨.")
-                else:
+                if not self.mock_mode:
                     # 실제 장치 비활성화 로직 구현
                     pass
                 return True
