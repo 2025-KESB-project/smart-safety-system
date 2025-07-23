@@ -26,3 +26,5 @@ venv/
 # Raspberry Pi specific (optional)
 *.deb
 *.img
+# Firebase credentials
+config/firebase_credential.json

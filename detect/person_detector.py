@@ -2,6 +2,7 @@ import numpy as np
 from typing import List, Dict, Any
 from ultralytics import YOLO
 from loguru import logger
+import torch
 
 class PersonDetector:
     """사람 감지 (YOLOv8 사용, 핵심 기능만)"""
@@ -15,8 +16,18 @@ class PersonDetector:
             conf_threshold: 신뢰도 임계값
         """
         try:
+            # M1/M2 MPS(GPU) 사용 가능 여부 확인
+            if torch.backends.mps.is_available():
+                self.device = "mps"
+                logger.info("MPS (Apple Silicon GPU) 사용 가능. 장치를 'mps'로 설정합니다.")
+            else:
+                self.device = "cpu"
+                logger.info("MPS 사용 불가능. 장치를 'cpu'로 설정합니다.")
+
             self.model = YOLO(model_path)
+            self.model.to(self.device) # 모델을 지정된 장치로 이동
             self.conf_threshold = conf_threshold
+            
             # 'person' 클래스 ID를 모델로부터 동적으로 찾아오도록 개선
             self.person_class_id = self._get_class_id('person')
             if self.person_class_id is None:
@@ -55,7 +66,8 @@ class PersonDetector:
             return []
 
         try:
-            results = self.model.predict(source=frame, conf=self.conf_threshold, classes=[self.person_class_id], verbose=False)
+            # 예측 시에도 장치 지정
+            results = self.model.predict(source=frame, conf=self.conf_threshold, classes=[self.person_class_id], device=self.device, verbose=False)
             
             persons = []
             if results and results[0].boxes is not None:

@@ -3,76 +3,101 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Safety System Dashboard</title>
+    <title>Smart Safety System - Live View</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif; background-color: #f4f7f9; color: #333; margin: 0; padding: 20px; }
-        .container { max-width: 1200px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #2c3e50; }
-        .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-top: 30px; }
-        .status-card { background-color: #ecf0f1; border-radius: 8px; padding: 20px; text-align: center; }
-        .status-card h3 { margin-top: 0; color: #34495e; }
-        .status-card p { font-size: 2em; font-weight: bold; margin: 10px 0 0; }
-        #mode { color: #3498db; }
-        #risk_level { color: #e74c3c; }
-        #power_state { color: #2ecc71; }
-        #speed { color: #f39c12; }
-        .error { color: #e74c3c; border: 1px solid #e74c3c; padding: 10px; border-radius: 5px; margin-top: 20px; }
+        body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif; background-color: #1a1a1a; color: #e0e0e0; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 1280px; }
+        h1 { text-align: center; color: #4CAF50; }
+        .main-content { display: flex; gap: 20px; }
+        .video-container { flex-grow: 1; border: 1px solid #444; }
+        .video-container img { width: 100%; height: auto; display: block; }
+        .controls-and-logs { width: 320px; display: flex; flex-direction: column; gap: 20px; }
+        .controls, .logs { background-color: #2c2c2c; padding: 15px; border-radius: 8px; }
+        h2 { margin-top: 0; border-bottom: 1px solid #4CAF50; padding-bottom: 10px; }
+        button { background-color: #4CAF50; color: white; border: none; padding: 10px 15px; text-align: center; text-decoration: none; display: inline-block; font-size: 16px; margin: 4px 2px; cursor: pointer; border-radius: 5px; width: 100%; }
+        button:hover { background-color: #45a049; }
+        #log-container { height: 400px; overflow-y: auto; background-color: #1a1a1a; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 12px; }
+        .log-message { padding: 5px; border-bottom: 1px solid #333; }
+        .log-message.critical { color: #ff6b6b; }
+        .log-message.high { color: #ffa07a; }
+        .log-message.medium { color: #ffd700; }
+        .log-message.safe { color: #90ee90; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Smart Safety System Dashboard</h1>
-        <div id="status-grid" class="status-grid">
-            <div class="status-card">
-                <h3>Mode</h3>
-                <p id="mode">N/A</p>
+        <h1>Smart Safety System - Live Dashboard</h1>
+        <div class="main-content">
+            <div class="video-container">
+                <h2>Live Feed</h2>
+                <img src="http://localhost:8000/api/video_feed" alt="Live video feed from the safety system.">
             </div>
-            <div class="status-card">
-                <h3>Risk Level</h3>
-                <p id="risk_level">N/A</p>
-            </div>
-            <div class="status-card">
-                <h3>Power State</h3>
-                <p id="power_state">N/A</p>
-            </div>
-            <div class="status-card">
-                <h3>Speed (%)</h3>
-                <p id="speed">N/A</p>
+            <div class="controls-and-logs">
+                <div class="controls">
+                    <h2>Controls</h2>
+                    <button id="toggle-mode-btn">Toggle Conveyor Mode</button>
+                </div>
+                <div class="logs">
+                    <h2>Real-time Alerts</h2>
+                    <div id="log-container"></div>
+                </div>
             </div>
         </div>
-        <div id="error-container" class="error" style="display: none;"></div>
     </div>
 
     <script>
-        const API_URL = 'http://127.0.0.1:8000'; // FastAPI 서버 주소
+        const logContainer = document.getElementById('log-container');
+        const toggleButton = document.getElementById('toggle-mode-btn');
 
-        async function fetchStatus() {
-            const errorContainer = document.getElementById('error-container');
-            try {
-                const response = await fetch(`${API_URL}/status`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-                
-                document.getElementById('mode').textContent = data.mode.toUpperCase();
-                document.getElementById('risk_level').textContent = data.risk_level.toUpperCase();
-                document.getElementById('power_state').textContent = data.power_state.toUpperCase();
-                document.getElementById('speed').textContent = data.speed;
+        // --- WebSocket Connection ---
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(`${wsProtocol}://localhost:8000/ws/alerts`);
 
-                errorContainer.style.display = 'none';
-            } catch (error) {
-                console.error("Failed to fetch status:", error);
-                errorContainer.textContent = `Failed to connect to the server. Please ensure the FastAPI server is running at ${API_URL}.`;
-                errorContainer.style.display = 'block';
-            }
+        ws.onopen = function(event) {
+            console.log("WebSocket connection established.");
+            addLog("Connected to server for real-time alerts.", "safe");
+        };
+
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            console.log("Message from server: ", data);
+            const riskLevel = data.risk_level || 'medium';
+            addLog(JSON.stringify(data, null, 2), riskLevel);
+        };
+
+        ws.onclose = function(event) {
+            console.error("WebSocket connection closed.");
+            addLog("Connection to server lost. Please refresh.", "critical");
+        };
+
+        ws.onerror = function(error) {
+            console.error("WebSocket error: ", error);
+            addLog("An error occurred with the real-time alert system.", "critical");
+        };
+
+        function addLog(message, level) {
+            const logElement = document.createElement('div');
+            logElement.className = `log-message ${level}`;
+            logElement.textContent = message;
+            logContainer.appendChild(logElement);
+            // Scroll to the bottom
+            logContainer.scrollTop = logContainer.scrollHeight;
         }
 
-        // 1초마다 상태를 업데이트
-        setInterval(fetchStatus, 1000);
+        // --- Control Button --- 
+        toggleButton.addEventListener('click', async () => {
+            try {
+                const response = await fetch('http://localhost:8000/api/toggle_mode', { method: 'POST' });
+                const data = await response.json();
+                console.log("Toggled mode:", data);
+                const mode = data.conveyor_operating ? 'OPERATING' : 'STOPPED';
+                addLog(`Conveyor mode changed to: ${mode}`, 'safe');
+            } catch (error) {
+                console.error("Failed to toggle mode:", error);
+                addLog("Error trying to change conveyor mode.", "critical");
+            }
+        });
 
-        // 페이지 로드 시 즉시 실행
-        document.addEventListener('DOMContentLoaded', fetchStatus);
     </script>
 </body>
 </html>

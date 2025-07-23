@@ -3,6 +3,7 @@ import numpy as np
 from typing import List, Dict, Any
 from ultralytics import YOLO
 from loguru import logger
+import torch
 
 class PoseDetector:
     """YOLOv8-pose 모델을 사용하여 사람의 자세를 분석하고 비정상 상태(넘어짐, 낌)를 탐지합니다."""
@@ -16,8 +17,28 @@ class PoseDetector:
             conf_threshold: 사람 객체 탐지에 대한 신뢰도 임계값
         """
         try:
+            # 알려진 MPS 버그로 인해 Pose 모델은 CPU를 사용하도록 강제합니다.
+            self.device = "cpu"
+            logger.warning("PoseDetector는 알려진 MPS 버그를 피하기 위해 'cpu' 장치를 사용합니다.")
+
             self.model = YOLO(model_path)
+            self.model.to(self.device) # 모델을 CPU로 이동
             self.conf_threshold = conf_threshold
+            
+            # --- Keypoint 이름 처리 로직 개선 ---
+            # 초기화 시점에 단 한번만 확인하여, 매번 경고가 발생하는 것을 방지합니다.
+            self.kpt_names = None
+            # 모델의 names 속성이 있고, 그 안에 17개의 COCO keypoint 이름이 있는지 확인
+            if hasattr(self.model, 'names') and isinstance(self.model.names, dict) and len(self.model.names) == 17:
+                self.kpt_names = self.model.names
+                logger.info("PoseDetector가 모델에서 17개의 Keypoint 이름을 성공적으로 로드했습니다.")
+            else:
+                logger.warning(
+                    f"모델의 'names' 속성에서 17개의 Keypoint 이름을 찾을 수 없습니다. "
+                    f"(Found: {getattr(self.model, 'names', 'N/A')}). "
+                    "감지 시 일반 이름(kp_0, kp_1...)을 사용합니다."
+                )
+            
             logger.info(f"PoseDetector 초기화 완료: {model_path}")
         except Exception as e:
             logger.error(f"PoseDetector 초기화 실패: {e}")
@@ -35,25 +56,38 @@ class PoseDetector:
             e.g., [{"bbox": [...], "keypoints": {...}, "analysis": {...}}]
         """
         try:
-            results = self.model.predict(source=frame, conf=self.conf_threshold, verbose=False)
+            # 예측 시에도 장치를 명시적으로 CPU로 지정합니다.
+            results = self.model.predict(source=frame, conf=self.conf_threshold, device=self.device, verbose=False)
         except Exception as e:
             logger.error(f"자세 예측 중 오류 발생: {e}")
             return []
 
         detected_poses = []
-        if not results or results[0].keypoints is None:
+        
+        if not results or results[0].boxes is None or len(results[0].boxes) == 0:
             return []
 
-        #results[0]은 첫번째 프레임! 사람 X 그래서 results[0]안에 여러 사람의 정보가 들어있을 수 있음
-        #keypoints를 for문 돌리면 여러 사람이 들어있음!
+        if results[0].keypoints is None or len(results[0].keypoints) == 0:
+            return []
+
         for i, person_keypoints in enumerate(results[0].keypoints):
+            if i >= len(results[0].boxes):
+                continue
+
             bbox = results[0].boxes[i].xyxy[0].cpu().numpy().astype(int)
             keypoints = person_keypoints.xy[0].cpu().numpy()
             keypoints_conf = person_keypoints.conf[0].cpu().numpy()
 
-            # 관절 좌표를 이름과 매핑
-            # kp = keypoints, conf = keypoints_conf
-            keypoints_map = {name: (kp, conf) for name, (kp, conf) in zip(self.model.names.values(), zip(keypoints, keypoints_conf))}
+            # 관절 좌표를 이름과 매핑 (초기화 시 설정된 kpt_names 사용)
+            keypoints_map = {}
+            if self.kpt_names:
+                for kp_idx, name in self.kpt_names.items():
+                    if kp_idx < len(keypoints):
+                        keypoints_map[name] = (keypoints[kp_idx], keypoints_conf[kp_idx])
+            else:
+                # kpt_names가 없으면 일반 이름 사용 (경고는 초기화 시 한번만)
+                for kp_idx in range(len(keypoints)):
+                    keypoints_map[f"kp_{kp_idx}"] = (keypoints[kp_idx], keypoints_conf[kp_idx])
 
             # 자세 분석
             analysis = self._analyze_pose(bbox, keypoints_map)

@@ -4,20 +4,26 @@ from typing import List, Dict, Any
 from control.alert_controller import AlertController
 from control.power_controller import PowerController
 from control.speed_controller import SpeedController
-from server.services.alert_service import AlertService
-from server.services.db_service import DBService
-from server.services.logger_service import LoggerService
+# ServiceFacade를 임포트합니다.
+from server.service_facade import ServiceFacade
 
 logger = logging.getLogger(__name__)
 
 class ControlFacade:
-    def __init__(self, mock_mode: bool = True):
+    def __init__(self, mock_mode: bool = True, service_facade: ServiceFacade = None):
         self.alert_controller = AlertController(mock_mode=mock_mode)
         self.power_controller = PowerController(mock_mode=mock_mode)
         self.speed_controller = SpeedController(mock_mode=mock_mode)
-        self.alert_service = AlertService()
-        self.db_service = DBService()
-        self.logger_service = LoggerService()
+        # ServiceFacade를 주입받습니다.
+        self.service_facade = service_facade
+        if self.service_facade is None:
+            logger.warning("ServiceFacade가 주입되지 않았습니다. 서비스 관련 기능이 제한될 수 있습니다.")
+            # 테스트 목적으로 ServiceFacade가 없을 경우를 대비하여 더미 객체 할당
+            class DummyServiceFacade:
+                def notify_ui(self, *args, **kwargs): pass
+                def log_event(self, *args, **kwargs): pass
+                def get_system_status(self, *args, **kwargs): return {}
+            self.service_facade = DummyServiceFacade()
 
     def execute_actions(self, actions: List[Dict[str, Any]]):
         """
@@ -27,8 +33,6 @@ class ControlFacade:
         for action in actions:
             action_type = action.get("type")
             details = action.get("details", {})
-            
-            logger.info(f"Executing action: {action_type} with details: {details}")
 
             if action_type == "PREVENT_POWER_ON":
                 self.power_controller.prevent_power_on(details.get('reason'))
@@ -45,9 +49,9 @@ class ControlFacade:
             elif action_type == "TRIGGER_ALARM_MEDIUM":
                 self.alert_controller.trigger_medium_alarm(details.get('message'))
             elif action_type == "NOTIFY_UI":
-                self.alert_service.send_ui_notification(details)
+                self.service_facade.notify_ui(details)
             elif action_type.startswith("LOG_"):
-                self.db_service.log_event(action_type, details)
-                self.logger_service.log_info(f"Event: {action_type} - {details}")
+                self.service_facade.log_event(action_type, details)
             else:
-                self.logger_service.log_warning(f"Unknown action type: {action_type}")
+                # 알 수 없는 액션 타입은 경고 로그로 남깁니다.
+                self.service_facade.logger_service.log_warning(f"Unknown action type: {action_type}")
