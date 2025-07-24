@@ -79,27 +79,35 @@ def run_safety_system(config: dict, service_facade: ServiceFacade, detector: Det
             actions = logic_facade.process(detection_result=detection_result, sensor_data=sensor_data)
             
             risk_analysis = logic_facade.last_risk_analysis
-            
-            # Firestore 이벤트 로깅 및 UI 알림
-            for action in actions:
-                # DB 로깅
-                if action.get("type", "").startswith("LOG_"):
-                    service_facade.db_service.log_event(
-                        event_type=action["type"],
-                        risk_level=risk_analysis.get("risk_level", "unknown"),
-                        details=action.get("details", {})
-                    )
-                # UI 실시간 알림
-                if action.get("type") == "NOTIFY_UI":
-                    coro = service_facade.alert_service.connection_manager.broadcast(action.get("details", {}))
-                    asyncio.run_coroutine_threadsafe(coro, loop)
-
-            # 상태 변경 로깅
             current_risk_level = risk_analysis.get("risk_level", "unknown")
-            current_action_types = sorted([a['type'] for a in actions])
+            # set으로 변환하여 순서에 상관없이 비교하도록 개선
+            current_action_types = set(a['type'] for a in actions)
 
+            # --- 상태 변경 감지 및 로깅 ---
             if current_risk_level != previous_risk_level or current_action_types != previous_action_types:
-                logger.info(f"상태 변경 감지: [위험 수준: {current_risk_level}] [모드: {'작동' if conveyor_is_on else '멈춤'}] -> 조치: {', '.join(current_action_types) or '없음'}")
+                # 1. 터미널에 상태 변경 로그 출력
+                action_names = sorted(list(current_action_types))
+                logger.info(
+                    f"상태 변경 감지: [위험 수준: {current_risk_level}] "
+                    f"[모드: {'작동' if conveyor_is_on else '멈춤'}] -> "
+                    f"조치: {', '.join(action_names) or '없음'}"
+                )
+
+                # 2. 상태가 변경되었을 때만 DB 로깅 및 UI 알림 실행
+                for action in actions:
+                    # DB 로깅
+                    if action.get("type", "").startswith("LOG_"):
+                        service_facade.db_service.log_event(
+                            event_type=action["type"],
+                            risk_level=risk_analysis.get("risk_level", "unknown"),
+                            details=action.get("details", {})
+                        )
+                    # UI 실시간 알림
+                    if action.get("type") == "NOTIFY_UI":
+                        coro = service_facade.alert_service.connection_manager.broadcast(action.get("details", {}))
+                        asyncio.run_coroutine_threadsafe(coro, loop)
+                
+                # 3. 다음 비교를 위해 현재 상태를 이전 상태로 저장
                 previous_risk_level = current_risk_level
                 previous_action_types = current_action_types
 
@@ -110,7 +118,7 @@ def run_safety_system(config: dict, service_facade: ServiceFacade, detector: Det
             mode_text = "Mode: OPERATING" if conveyor_is_on else "Mode: STOPPED"
             cv2.putText(display_frame, mode_text, (15, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
             cv2.putText(display_frame, f"Risk Level: {current_risk_level.upper()}", (15, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 165, 255), 2)
-            action_summary_display = ", ".join(current_action_types) if actions else "No Actions"
+            action_summary_display = ", ".join(sorted(list(current_action_types))) if actions else "No Actions"
             cv2.putText(display_frame, f"Actions: {action_summary_display}", (15, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
 
             # 다른 모듈에서 사용할 수 있도록 최신 프레임과 탐지 결과 저장
