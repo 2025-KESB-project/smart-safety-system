@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Depends, Request
+from fastapi.middleware.cors import CORSMiddleware # CORS 미들웨어 임포트
 from loguru import logger
 
 # --------------------------------------------------------------------------
@@ -24,6 +25,7 @@ logger.add(
 from server.routes.events import event_router
 from server.routes.streaming import router as streaming_router
 from server.routes.websockets import router as websocket_router
+# from server.routes.users import router as users_router # 존재하지 않으므로 주석 처리 또는 삭제
 from server.service_facade import ServiceFacade
 from detect.detect_facade import Detector
 from logic.logic_facade import LogicFacade
@@ -103,11 +105,30 @@ app = FastAPI(
 )
 
 # --------------------------------------------------------------------------
+# CORS 미들웨어 설정
+# --------------------------------------------------------------------------
+# 허용할 출처(Origin) 목록입니다. React 개발 서버의 기본 주소인 3000번 포트를 추가합니다.
+origins = [
+    "http://localhost",
+    "http://localhost:3000", # React 개발 서버
+    "http://localhost:8080", # Vue 개발 서버 등
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins, # 위에서 정의한 출처 목록을 허용
+    allow_credentials=True, # 쿠키를 포함한 요청을 허용
+    allow_methods=["*"],    # 모든 HTTP 메소드(GET, POST 등)를 허용
+    allow_headers=["*"],    # 모든 HTTP 헤더를 허용
+)
+
+# --------------------------------------------------------------------------
 # API 라우터 등록
 # --------------------------------------------------------------------------
 app.include_router(event_router, prefix="/api", tags=["Event Logs"])
 app.include_router(streaming_router, prefix="/api", tags=["Streaming & Control"])
 app.include_router(websocket_router) # WebSocket은 prefix나 tag가 필요 없을 수 있습니다.
+# app.include_router(users_router, prefix="/api", tags=["Users"]) # 존재하지 않으므로 주석 처리 또는 삭제
 
 # --------------------------------------------------------------------------
 # 기본 라우트 (예: 상태 확인)
