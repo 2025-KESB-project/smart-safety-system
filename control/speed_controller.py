@@ -17,10 +17,12 @@ class SpeedController:
 
     def __init__(self, mock_mode: bool = True, port: Optional[str] = None, baudrate: int = 9600):
         """
-        속도 제어기를 초기화합니다.
-        :param mock_mode: 모의 모드 여부. False일 경우 실제 아두이노와 통신합니다.
-        :param port: 아두이노 시리얼 포트. None이면 자동으로 찾습니다.
-        :param baudrate: 통신 속도 (보드레이트).
+        SpeedController를 초기화합니다.
+        
+        Args:  
+            param mock_mode: 모의 모드 여부. False일 경우 실제 아두이노와 통신합니다.
+            param port: 아두이노 시리얼 포트. None이면 자동으로 찾습니다.
+            param baudrate: 통신 속도 (보드레이트).
         """
         self.mock_mode = mock_mode
         self.current_speed_percent = 100  # 0-100%
@@ -35,7 +37,13 @@ class SpeedController:
         logger.info(f"속도 제어기 초기화: 모의 모드: {self.mock_mode}, 포트: {self.get_port_info() or 'N/A'}")
 
     def _initialize_serial(self, port: Optional[str], baudrate: int):
-        """시리얼 포트를 찾아 아두이노와 연결을 초기화합니다."""
+        """
+        시리얼 포트를 찾아 아두이노와 연결을 초기화합니다.
+        
+        Args:
+            param port: 아두이노 시리얼 포트. None이면 자동으로 찾습니다.
+            param baudrate: 통신 속도 (보드레이트).
+        """
         try:
             if port is None:
                 port = self._find_arduino_port()
@@ -53,7 +61,12 @@ class SpeedController:
             self.arduino = None
 
     def _find_arduino_port(self) -> Optional[str]:
-        """연결된 장치 목록에서 아두이노 포트를 자동으로 찾습니다."""
+        """
+        연결된 장치 목록에서 아두이노 포트를 자동으로 찾습니다.
+        
+        Returns:
+            Optional[str]: 아두이노 포트 문자열 또는 None
+        """
         ports = serial.tools.list_ports.comports()
         for p in ports:
             # 아두이노는 보통 'Arduino' 또는 'CH340' 같은 문자열을 포함
@@ -63,10 +76,15 @@ class SpeedController:
         return None
 
     def set_speed(self, percent: int, reason: str = "Manual control") -> bool:
-        """
+        """ 
         속도를 설정하고, 실제 모드일 경우 아두이노에 명령을 전송합니다.
-        :param percent: 설정할 속도 (0-100%)
-        :param reason: 속도 변경 이유
+        
+        Args:
+            param percent: 설정할 속도 (0-100%)
+            param reason: 속도 변경 이유
+
+        Returns:
+            bool: 속도 변경 성공 여부
         """
         if not (0 <= percent <= 100):
             logger.warning(f"유효하지 않은 속도 값: {percent}. 0-100% 범위여야 합니다.")

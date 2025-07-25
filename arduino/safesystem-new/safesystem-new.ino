@@ -3,136 +3,125 @@ const int MOTOR_ENA = 9;
 const int MOTOR_IN1 = 8;
 const int MOTOR_IN2 = 7;
 
-// PIR 센서 핀
-const int PIR_PIN = 2;
+// 전원 릴레이 제어 핀
+const int RELAY_PIN = 6;
 
-// PIR 센서 상태
-int pir_state = LOW;
-int last_pir_state = LOW;
+// 피에조 부저 핀
+const int BUZZER_PIN = 11;
 
-// 타이머 변수 (주기적인 데이터 전송용)
+// 초음파 센서 (거리 측정)
+const int TRIG = 5;
+const int ECHO = 4;
+
+// 주기적 데이터 전송을 위한 타이머 변수
 unsigned long last_send_time = 0;
-const long send_interval = 1000; // 1초마다 데이터 전송
-
+const long send_interval = 200; // 0.2초마다 데이터 전송
 
 void setup() {
-  // 시리얼 통신 시작 (Python과 통신용)
   Serial.begin(9600);
 
-  // 모터 제어 핀 초기화 (기존 시스템)
   pinMode(MOTOR_ENA, OUTPUT);
   pinMode(MOTOR_IN1, OUTPUT);
   pinMode(MOTOR_IN2, OUTPUT);
-  
-  // 모터는 기본적으로 비활성화 상태로 시작
-  digitalWrite(MOTOR_ENA, HIGH); // HIGH일 때 비활성화라고 가정
+  digitalWrite(MOTOR_IN1, LOW);
+  digitalWrite(MOTOR_IN2, LOW);
+  analogWrite(MOTOR_ENA, 0);
 
-  // PIR 센서 핀 초기화
-  pinMode(PIR_PIN, INPUT);
+  pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, HIGH); // 기본적으로 전원 ON
 
-  Serial.println("Arduino is ready.");
+  pinMode(BUZZER_PIN, OUTPUT);
+  noTone(BUZZER_PIN);
+
+  while (!Serial) {
+    ;
+  }
+  Serial.println("Arduino is ready. Waiting for commands.");
 }
 
-// --- 메인 루프 ---
 void loop() {
-  // 1. 기존 모터 제어 로직 (여기에 구현)
-  motor();
+  // 1. 시리얼 명령을 받아 모터, 릴레이, 부저 제어
+  handle_serial_commands();
 
-  // 2. 센서 데이터 처리
-  handle_sensors();
-
-  // 3. 주기적으로 데이터 전송
+  // 2. 주기적으로 센서 데이터 전송
   send_data_periodically();
 }
 
-// --- 함수 정의 ---
-
-/*
- * @brief 기존 모터 제어 관련 함수들 (예시)
+/**
+ * @brief 시리얼 명령을 처리합니다.
+ * s<0-255>: 모터 속도 제어
+ * p<0-1>: 릴레이 전원 제어
+ * b<0-1>: 부저 제어
  */
-void motor() {
+void handle_serial_commands() {
   if (Serial.available()) {
     String cmd = Serial.readStringUntil('\n');
+    cmd.trim();
+
     if (cmd.startsWith("s")) {
       int pwmVal = cmd.substring(1).toInt();
-      // 속도 값이 0보다 크면 정방향으로 회전
+      pwmVal = constrain(pwmVal, 0, 255);
       if (pwmVal > 0) {
-        pwmVal = constrain(pwmVal, 0, 255);
         digitalWrite(MOTOR_IN1, HIGH);
         digitalWrite(MOTOR_IN2, LOW);
-        analogWrite(MOTOR_ENA, pwmVal);
-
-        Serial.print("Speed set to: ");
-        Serial.println(pwmVal);
-      }
-      else {
+      } else {
         digitalWrite(MOTOR_IN1, LOW);
         digitalWrite(MOTOR_IN2, LOW);
-        analogWrite(MOTOR_ENA, 0);
-
-        Serial.println("Motor stopped");
+      }
+      analogWrite(MOTOR_ENA, pwmVal);
+      // Serial.print("Log: Motor speed set to ");
+      // Serial.println(pwmVal);
+    } 
+    else if (cmd.startsWith("p")) {
+      int power_state = cmd.substring(1).toInt();
+      if (power_state == 0) {
+        digitalWrite(RELAY_PIN, LOW);
+        // Serial.println("Log: Power Relay OFF");
+      } else {
+        digitalWrite(RELAY_PIN, HIGH);
+        // Serial.println("Log: Power Relay ON");
+      }
+    }
+    else if (cmd.startsWith("b")) {
+      int buzzer_state = cmd.substring(1).toInt();
+      if (buzzer_state == 1) {
+        tone(BUZZER_PIN, 1000);
+        // Serial.println("Log: Buzzer ON");
+      } else {
+        noTone(BUZZER_PIN);
+        // Serial.println("Log: Buzzer OFF");
       }
     }
   }
 }
 
-void initFastPWM31k() {
-  TCCR1A = _BV(COM1A1) | _BV(WGM10);
-  TCCR1B = _BV(WGM12)  | _BV(CS10);
-}
-
-
-/*
- * @brief 모든 센서의 현재 상태를 읽고 처리합니다.
+/**
+ * @brief 초음파 센서 거리를 측정합니다.
  */
-void handle_sensors() {
-  // PIR 센서 상태 읽기
-  pir_state = digitalRead(PIR_PIN);
-
-  // 상태 변화가 있을 때만 시리얼로 즉시 전송 (디버깅용)
-  if (pir_state != last_pir_state) {
-    Serial.print("PIR state changed to: ");
-    Serial.println(pir_state);
-    send_pir_data(); // 상태 변경 시 즉시 데이터 전송
-    last_pir_state = pir_state;
-  }
+long readUltrasonicSensor() {
+  digitalWrite(TRIG, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG, LOW);
+  long duration = pulseIn(ECHO, HIGH, 25000);
+  long dist = duration * 0.034 / 2;
+  return dist > 0 ? dist : 999; // 0이면 오류로 간주하고 큰 값 반환 (오류를 일으키는 것으로 예상됨)
 }
 
-/*
- * @brief 주기적으로 통합된 센서 데이터를 JSON 형식으로 전송합니다.
+/**
+ * @brief 주기적으로 센서 데이터를 JSON 형식으로 전송합니다.
  */
 void send_data_periodically() {
   unsigned long current_time = millis();
   if (current_time - last_send_time >= send_interval) {
     last_send_time = current_time;
     
-    // PIR 센서 데이터 전송
-    send_pir_data();
-    
-    // 여기에 다른 센서 데이터 전송 함수 추가 가능
-    // send_ultrasonic_data();
+    long distance = readUltrasonicSensor();
+
+    // JSON 형식: {"ultrasonic": <dist>}
+    Serial.print("{\"ultrasonic\": ");
+    Serial.print(distance);
+    Serial.println("}");
   }
-} 
-
-/*
- * @brief PIR 센서 데이터를 JSON 형식으로 시리얼 포트에 출력합니다.
- */
-void send_pir_data() {
-  // JSON 형식: {"type": "PIR", "value": 0 또는 1}
-  Serial.print("{\"type\": \"PIR\", \"value\": ");
-  Serial.print(pir_state);
-  Serial.println("}");
 }
-
-/*
- * @brief (확장용) 초음파 센서 데이터를 JSON 형식으로 출력하는 함수 예시
- */
-/*
-void send_ultrasonic_data() {
-  // 여기에 초음파 센서 거리 측정 로직 추가
-  int distance = 100; // 예시 값
-  Serial.print("{\"type\": \"ULTRASONIC\", \"value\": ");
-  Serial.print(distance);
-  Serial.println("}");
-}
-*/
