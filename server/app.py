@@ -36,7 +36,7 @@ from server.background_worker import run_safety_system
 # --------------------------------------------------------------------------
 CONFIG = {
     'input': {
-        'camera_index': 3,
+        'camera_index': 0,
         'mock_mode': False
     },
     'detector': {
