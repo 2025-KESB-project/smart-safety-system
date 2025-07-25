@@ -22,11 +22,11 @@ class Config:
     MOCK_MODE_INPUT = os.getenv("MOCK_MODE_INPUT", "False").lower() == "true"
 
     # AI 모델 설정
-    YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "yolov8n.pt")
-    POSE_MODEL_PATH = os.getenv("POSE_MODEL_PATH", "yolov8n-pose.pt")
+    YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "../yolov8n.pt")
+    POSE_MODEL_PATH = os.getenv("POSE_MODEL_PATH", "../yolov8n-pose.pt")
     CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.5"))
-    PERSON_DETECTOR_MODEL_PATH = os.getenv("PERSON_DETECTOR_MODEL_PATH", "yolov8n.pt")
-    POSE_DETECTOR_MODEL_PATH = os.getenv("POSE_DETECTOR_MODEL_PATH", "yolov8n-pose.pt")
+    PERSON_DETECTOR_MODEL_PATH = os.getenv("PERSON_DETECTOR_MODEL_PATH", "../yolov8n.pt")
+    POSE_DETECTOR_MODEL_PATH = os.getenv("POSE_DETECTOR_MODEL_PATH", "../yolov8n-pose.pt")
     DANGER_ZONE_CONFIG_PATH = os.getenv("DANGER_ZONE_CONFIG_PATH", "danger_zones.json")
 
     # 제어 모듈 설정
