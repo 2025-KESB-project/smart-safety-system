@@ -105,7 +105,7 @@ class PoseDetector:
         """단일 사람의 관절 데이터를 기반으로 자세의 비정상 여부를 분석합니다."""
         analysis = {
             'is_falling': False,
-            'is_crouching': False, # 끼임, 웅크림 등
+            'is_crouching': False,
             'risk_level': 'low',
             'description': 'Normal'
         }
@@ -114,41 +114,73 @@ class PoseDetector:
         bbox_width = x2 - x1
         bbox_height = y2 - y1
 
-        # 1. 넘어짐 탐지 (Bounding Box 비율 기반)
-        if bbox_width > bbox_height * 1.3: # 너비가 높이보다 1.3배 이상 크면 넘어진 것으로 간주
+        # --- 넘어짐 판단 로직 (요청사항 반영하여 개선) ---
+
+        # 규칙 1: 바운딩 박스의 가로/세로 비율
+        is_fallen_by_bbox = bbox_width > bbox_height * 1.2
+
+        # 규칙 2: 주요 관절의 수직 위치 분석
+        is_fallen_by_keypoints = False
+        try:
+            # 머리, 어깨, 엉덩이 관절의 좌표와 신뢰도 추출
+            nose, nose_conf = keypoints.get('nose', ([0, 0], 0))
+            l_shoulder, l_shoulder_conf = keypoints.get('left_shoulder', ([0, 0], 0))
+            r_shoulder, r_shoulder_conf = keypoints.get('right_shoulder', ([0, 0], 0))
+            l_hip, l_hip_conf = keypoints.get('left_hip', ([0, 0], 0))
+            r_hip, r_hip_conf = keypoints.get('right_hip', ([0, 0], 0))
+
+            # 어깨와 엉덩이의 평균 y좌표 계산 (보이는 관절만 사용)
+            visible_shoulders_y = [p[1] for p, c in [(l_shoulder, l_shoulder_conf), (r_shoulder, r_shoulder_conf)] if c > 0.5]
+            visible_hips_y = [p[1] for p, c in [(l_hip, l_hip_conf), (r_hip, r_hip_conf)] if c > 0.5]
+
+            if visible_shoulders_y and visible_hips_y:
+                avg_shoulder_y = sum(visible_shoulders_y) / len(visible_shoulders_y)
+                avg_hip_y = sum(visible_hips_y) / len(visible_hips_y)
+
+                # 어깨가 엉덩이보다 아래에 있으면 넘어진 것으로 판단
+                if avg_shoulder_y > avg_hip_y:
+                    is_fallen_by_keypoints = True
+            
+            # 머리가 엉덩이보다 아래에 있는 경우도 추가
+            elif nose_conf > 0.5 and visible_hips_y:
+                avg_hip_y = sum(visible_hips_y) / len(visible_hips_y)
+                if nose[1] > avg_hip_y:
+                    is_fallen_by_keypoints = True
+
+        except Exception as e:
+            logger.warning(f"넘어짐 관절 분석 중 오류: {e}")
+
+
+        # 최종 넘어짐 판단: 두 규칙을 모두 만족해야 넘어진 것으로 간주
+        if is_fallen_by_bbox and is_fallen_by_keypoints:
             analysis.update({
                 'is_falling': True,
                 'risk_level': 'critical',
                 'description': 'Falling Detected'
             })
-            return analysis # 넘어짐이 감지되면 가장 위험하므로 추가 분석 중단
+            # 넘어짐이 감지되면 가장 위험하므로 추가 분석 중단하고 즉시 반환
+            return analysis
 
-        # 2. 끼임 / 웅크림 탐지 (몸통 길이 비율 기반)
+        # --- 끼임 / 웅크림 탐지 로직 (기존 로직 유지) ---
         try:
-            # 필요한 관절들의 신뢰도와 좌표 추출
-            l_shoulder, l_shoulder_conf = keypoints['left_shoulder']
-            r_shoulder, r_shoulder_conf = keypoints['right_shoulder']
-            l_hip, l_hip_conf = keypoints['left_hip']
-            r_hip, r_hip_conf = keypoints['right_hip']
+            l_shoulder, l_shoulder_conf = keypoints.get('left_shoulder', ([0, 0], 0))
+            r_shoulder, r_shoulder_conf = keypoints.get('right_shoulder', ([0, 0], 0))
+            l_hip, l_hip_conf = keypoints.get('left_hip', ([0, 0], 0))
+            r_hip, r_hip_conf = keypoints.get('right_hip', ([0, 0], 0))
 
-            # 주요 관절이 모두 잘 보이는 경우에만 분석 수행
-            if all(conf > 0.6 for conf in [l_shoulder_conf, r_shoulder_conf, l_hip_conf, r_hip_conf]):
+            if all(c > 0.6 for c in [l_shoulder_conf, r_shoulder_conf, l_hip_conf, r_hip_conf]):
                 shoulder_y = (l_shoulder[1] + r_shoulder[1]) / 2
                 hip_y = (l_hip[1] + r_hip[1]) / 2
                 torso_height = abs(hip_y - shoulder_y)
 
-                # 몸통의 높이가 전체 키(BBox 높이)의 30% 미만이면 비정상적인 굽힘으로 판단
                 if torso_height < bbox_height * 0.3:
                     analysis.update({
                         'is_crouching': True,
                         'risk_level': 'high',
                         'description': 'Abnormal Crouching / Stuck Detected'
                     })
-        except KeyError:
-            # 필요한 관절이 탐지되지 않은 경우
-            pass
         except Exception as e:
-            logger.warning(f"자세 분석 중 오류: {e}")
+            logger.warning(f"웅크림 자세 분석 중 오류: {e}")
 
         return analysis
 
