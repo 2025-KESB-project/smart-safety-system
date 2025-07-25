@@ -29,8 +29,6 @@ class ModeManager:
         """
         if is_conveyor_operating:
             self.current_mode = "operating"
-            logger.info("작업 모드: 컨베이어 작동 중 (operating)")
         else:
             self.current_mode = "stopped"
-            logger.info("작업 모드: 컨베이어 작동 멈춤 (stopped)")
         return self.current_mode

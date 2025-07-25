@@ -56,7 +56,6 @@ class PowerController:
 
     def allow_power_on(self, reason: str = "Safety interlock released: Danger zone clear") -> bool:
         with self._lock:
-            logger.info(f"[PowerController] Allowing power on: {reason}")
             if self.current_state != PowerState.EMERGENCY_OFF:
                 return self._set_state_unsafe(PowerState.ON, reason)
             else:
@@ -84,7 +83,6 @@ class PowerController:
 
     def _set_state_unsafe(self, new_state: PowerState, reason: str) -> bool:
         if self.current_state == new_state:
-            logger.info(f"이미 {new_state.value} 상태입니다.")
             return False
         
         state_change = {
