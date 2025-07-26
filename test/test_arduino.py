@@ -1,60 +1,108 @@
 import time
+import logging
 import sys
-from pathlib import Path
-from loguru import logger
+import os
 
-# SpeedController 모듈을 찾기 위해 프로젝트 루트를 시스템 경로에 추가
-try:
-  project_root = Path(__file__).parent.parent
-  sys.path.append(str(project_root))
+# 프로젝트 루트 경로를 sys.path에 추가
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-  from control.speed_controller import SpeedController
-  logger.info("SpeedController 모듈을 성공적으로 불러왔습니다.")
+from input_adapter.sensor import ArduinoController
 
-except (ImportError, ModuleNotFoundError) as e:
-    logger.error(f"모듈 임포트 실패. 이 스크립트를 프로젝트 루트에서 실행하고 있는지 확인하세요. 오류: {e}")
-    sys.exit(1)
-    
-# 아두이노 모터 제어 테스트 함수
-def run_test():
-  # None -> 자동 찾기, 실패 시 별도 지정 필요
-  controller = SpeedController(mock_mode=False, port="COM9")
+# 로깅 설정
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-  # 아두이노 연결 확인
-  if not controller.get_port_info():
-    logger.error("테스트를 진행할 수 없습니다. 아두이노 연결을 확인해주세요.")
-    return
+# --- 제어 상수 ---
+SERIAL_PORT = 'COM9'  # 사용하는 COM 포트에 맞게 수정하세요.
+BAUDRATE = 9600
 
-  try:
-    logger.info("--- 모터 제어 테스트 시작 ---")
+FULL_SPEED = 100       # 100% 속도
+HALF_SPEED = 50        # 50% 속도
+STOP_SPEED = 0         # 정지
 
-    # 1. 50% 속도로 설정
-    logger.info("1. 50% 속도로 설정합니다. (5초간 유지)")
-    controller.set_speed(50, "Test: Half speed")
-    time.sleep(5)
-  
-    # 2. 100% 속도로 설정
-    logger.info("2. 100% 속도로 설정합니다. (5초간 유지)")
-    controller.resume_full_speed("Test: Full speed")
-    time.sleep(5)
+PROXIMITY_THRESHOLD_SLOW = 20  # 20cm 이내 감지 시 감속
+PROXIMITY_THRESHOLD_STOP = 10  # 10cm 이내 감지 시 정지
 
-    # 3. 20% 속도로 설정
-    logger.info("3. 20% 속도로 설정합니다. (5초간 유지)")
-    controller.set_speed(20, "Test: Low speed")
-    time.sleep(5)
+SAFE_DURATION_THRESHOLD = 5  # 5초 동안 안전 거리가 유지되면 정상 속도로 복귀
 
-    # 4. 모터 정지
-    logger.info("4. 모터를 정지합니다.")
-    controller.stop_conveyor("Test: Stop")
-    time.sleep(2)
+class ConveyorTester:
+    def __init__(self, port, baudrate):
+        self.arduino = ArduinoController(port, baudrate)
+        self.current_speed = 0
+        self.is_buzzer_on = False
+        self.last_proximity_time = None
 
-  except Exception as e:
-    logger.error(f"테스트 중 오류 발생: {e}")
+    def run_test(self):
+        if not self.arduino.connect():
+            logging.error("테스트를 시작할 수 없습니다. 아두이노 연결을 확인하세요.")
+            return
 
-  finally:
-    # 5. 연결 종료 (자동으로 모터가 정지됩니다)
-    logger.info("--- 테스트 종료. 시리얼 연결을 해제합니다. ---")
-    controller.close()
+        try:
+            logging.info("테스트 시작: 컨베이어를 100% 속도로 가동합니다.")
+            self.set_speed(FULL_SPEED)
+
+            while True:
+                sensor_data = self.arduino.read_data()
+                distance = sensor_data.get('ultrasonic', 999)
+
+                logging.info(f"수신 데이터: 거리 = {distance} cm, 현재 속도 = {self.current_speed}%")
+
+                if distance <= PROXIMITY_THRESHOLD_STOP:
+                    # 10cm 이내: 정지 및 부저 ON
+                    if self.current_speed != STOP_SPEED:
+                        logging.warning(f"[위험] {distance}cm 이내 물체 감지! 모터를 정지하고 부저를 켭니다.")
+                        self.set_speed(STOP_SPEED)
+                        self.set_buzzer(True)
+                    self.last_proximity_time = time.time()
+
+                elif distance <= PROXIMITY_THRESHOLD_SLOW:
+                    # 20cm 이내: 50% 감속
+                    if self.current_speed != HALF_SPEED:
+                        logging.warning(f"[경고] {distance}cm 이내 물체 감지! 모터를 50%로 감속합니다.")
+                        self.set_speed(HALF_SPEED)
+                        self.set_buzzer(False) # 정지 상태가 아니므로 부저는 끔
+                    self.last_proximity_time = time.time()
+
+                else:
+                    # 안전 거리: 정상 속도로 복귀 조건 확인
+                    if self.current_speed != FULL_SPEED:
+                        if self.last_proximity_time is None:
+                            self.last_proximity_time = time.time() # 타이머 초기화
+                        
+                        safe_time = time.time() - self.last_proximity_time
+                        if safe_time >= SAFE_DURATION_THRESHOLD:
+                            logging.info(f"{SAFE_DURATION_THRESHOLD}초 동안 안전 거리 확보. 모터를 100%로 복귀합니다.")
+                            self.set_speed(FULL_SPEED)
+                            self.set_buzzer(False)
+                            self.last_proximity_time = None # 타이머 리셋
+                        else:
+                            logging.info(f"안전 거리 유지 시간: {safe_time:.1f}초. 복귀 대기 중...")
+                    
+                    # 부저가 켜져 있었다면 끈다.
+                    if self.is_buzzer_on:
+                        self.set_buzzer(False)
+
+                time.sleep(0.2) # 아두이노 전송 간격과 맞춤
+
+        except KeyboardInterrupt:
+            logging.info("사용자에 의해 테스트가 중단되었습니다.")
+        finally:
+            logging.info("테스트 종료: 모든 장치를 정지합니다.")
+            self.set_speed(STOP_SPEED)
+            self.set_buzzer(False)
+            self.arduino.disconnect()
+
+    def set_speed(self, speed_percent):
+        if self.current_speed != speed_percent:
+            self.arduino.set_motor_speed(speed_percent)
+            self.current_speed = speed_percent
+            logging.info(f"명령 전송: 모터 속도를 {speed_percent}%로 설정")
+
+    def set_buzzer(self, state):
+        if self.is_buzzer_on != state:
+            self.arduino.control_buzzer(state)
+            self.is_buzzer_on = state
+            logging.info(f"명령 전송: 부저를 {'ON' if state else 'OFF'}으로 설정")
 
 if __name__ == "__main__":
-  run_test()
+    tester = ConveyorTester(SERIAL_PORT, BAUDRATE)
+    tester.run_test()

@@ -1,6 +1,6 @@
 from .stream import VideoStream
 from .preprocess import VideoPreprocessor
-from .sensor import SensorReader
+from .sensor import ArduinoController
 
 class InputAdapter:
     def __init__(self, camera_index=0, sensor_pin=None, mock_mode=False):
@@ -16,7 +16,7 @@ class InputAdapter:
         else:
             self.stream = None
         self.preprocessor = VideoPreprocessor()
-        self.sensor = SensorReader(sensor_pin=sensor_pin if sensor_pin is not None else 0)
+        self.sensor = ArduinoController(port='COM3')
 
     def get_input(self):
         """카메라 프레임과 센서 데이터를 함께 가져와서 반환
