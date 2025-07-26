@@ -117,7 +117,7 @@ class PoseDetector:
         # --- 넘어짐 판단 로직 (요청사항 반영하여 개선) ---
 
         # 규칙 1: 바운딩 박스의 가로/세로 비율
-        is_fallen_by_bbox = bbox_width > bbox_height * 1.2
+        is_fallen_by_bbox = bbox_width > bbox_height * 1.1 # Threshold lowered from 1.2 to 1.1 for higher sensitivity
 
         # 규칙 2: 주요 관절의 수직 위치 분석
         is_fallen_by_keypoints = False
