@@ -47,36 +47,14 @@
 - 관리자 대시보드 제공
 
 ### 6. DB Layer
-- **이벤트 로그**: 감지/판단/경고 기록 저장 (Firestore `event_logs` 컬렉션)
-- **위험 구역 설정**: 다각형 위험 구역 정보 저장 (Firestore `danger_zones` 컬렉션)
+- 감지/판단/경고 기록 저장
+- MySQL 또는 Firebase 사용 예정
 
 ---
 
-## ⚠️ 주요 에러 및 해결된 이슈
-
-- **(해결)** **위험 구역 데이터 관리 방식 개선**: 
-    - **문제점**: 기존 `danger_zones.json` 파일은 확장성, 실시간 업데이트, 중앙 관리에 한계가 있었음.
-    - **해결**: 위험 구역 정보를 **Firestore DB**에 저장하도록 시스템을 전면 개편. 이를 위해 `server` 모듈에 `ZoneService` (DB 로직), `zone_api` (API 엔드포인트), `dependencies` (의존성 주입)를 추가함. `detect/danger_zone_mapper`는 이제 `ZoneService`를 통해 DB에서 직접 구역 정보를 로드함.
-
-- **(해결)** **Firestore 데이터 타입 불일치**: 
-    - **문제점**: Firestore는 2차원 배열(`[[x,y], ...]`)을 직접 지원하지 않아, 'map의 배열'(`[{0:x, 1:y}, ...]`) 형태로 저장해야 했음. 이로 인해 Python에서 데이터를 읽어올 때 `TypeError` 발생.
-    - **해결**: `danger_zone_mapper.py`의 `add_zone` 함수에 데이터 변환 로직을 추가하여, Firestore의 `map` 구조를 Python의 `list` 구조로 명시적으로 변환 후 `np.array()`에 전달함으로써 문제 해결.
-
-- **(해결)** **Firestore 연결 난립 및 중앙화**: 
-    - **문제점**: `DBService`와 `ZoneService`가 각각 `firebase_admin.initialize_app()`을 호출하여 DB 연결이 여러 곳에서 중복 발생하고 있었음.
-    - **해결**: `server/app.py`의 `lifespan` 함수에서 서버 시작 시 **단 한 번만** `firebase_admin.initialize_app()`을 호출하고 `firestore.client()` 객체를 생성하여 `app.state.db`에 저장하도록 변경. 모든 서비스(`DBService`, `ZoneService`)는 이제 `app.state.db`에서 가져온 단일 DB 클라이언트 객체를 주입받아 사용함.
-
-- **(해결)** **누락된 `get_db_service` 함수 추가**: 
-    - **문제점**: `server/dependencies.py` 리팩토링 과정에서 `get_db_service` 함수가 누락되어 `app.py`에서 `ImportError` 발생.
-    - **해결**: `server/dependencies.py`에 `get_db_service` 함수를 추가하여 `DBService` 인스턴스를 올바르게 주입할 수 있도록 함.
-
-- **(해결)** **잘못된 서버 실행 위치**: 
-    - **문제점**: `uvicorn` 명령어를 프로젝트 루트가 아닌 하위 디렉토리에서 실행하여 `ImportError` 발생.
-    - **해결**: `uvicorn` 명령은 항상 **프로젝트의 최상위 루트 디렉토리**에서 실행해야 함을 명확히 함.
+## ⚠️ 주요 에러 및 이슈
 
 - YOLOv8 예측 결과 관련 오류 (`stream=True` → generator 반환 이슈)
-- class filter 중복 체크 문제
-- `VideoStream.read()` 누락 오류
 - **자세 탐지 오탐지 문제**: '팔 벌리고 쪼그려 앉은 자세'를 '넘어짐'으로 오탐지하는 이슈 발생.
   - **원인**: BBox 비율 조건과 넘어짐 모델의 오인이 결합되어 발생.
   - **해결**: '끼임/웅크림'을 우선 판단하고, 해당 시 넘어짐 판단을 생략하는 방식으로 로직 고도화.
@@ -89,22 +67,31 @@
 
 ```
 .
-├── ...
+├── input_adapter/
+│   ├── stream.py
+│   ├── preprocess.py
+│   ├── sensor.py
+│   └── adapter.py
 ├── detect/
-│   ├── ...
+│   ├── person_detector.py
+│   ├── pose_detector.py
+│   ├── hand_gesture_detector.py
 │   └── danger_zone_mapper.py
 ├── logic/
-│   └── ...
+│   ├── mode_manager.py
+│   ├── risk_evaluator.py
+│   └── rule_engine.py
+├── control/
+│   ├── alert_controller.py
+│   ├── power_controller.py
+│   ├── speed_controller.py
+│   └── warning_device.py
 ├── server/
 │   ├── app.py
-│   ├── dependencies.py
+│   ├── config.py
+│   ├── models/
 │   ├── routes/
-│   │   ├── events.py
-│   │   └── zone_api.py  # <--- 추가됨
 │   └── services/
-│       ├── db_service.py
-│       └── zone_service.py # <--- 추가됨
-└── ...
 ├── test/
 │   └── test_input_adapter.py
 ├── verify_fall_model.py
@@ -114,78 +101,16 @@
 
 ## 🧭 향후 계획
 
-- **실시간 위험 구역 업데이트**: 현재 백그라운드 워커가 DB의 위험 구역 변경 사항을 즉시 반영하지 못함. 주기적 업데이트 또는 Firestore `on_snapshot`을 이용한 이벤트 기반 업데이트 로직 구현 필요.
-- **React 프론트엔드 연동**: `zone_api.py`와 연동하여, 관리자가 웹 UI에서 직접 위험 구역을 시각적으로 생성/수정/삭제하는 기능 구현.
-- failsafe 로직 강화: UI 승인 없이는 절대 전원 불가 구조 고려.
-- Rule Engine 방식 개선: Risk Score vs Boolean 판단.
-- Unity 기반 3D 시각화 시도.
+- failsafe 로직 강화: UI 승인 없이는 절대 전원 불가 구조 고려
+- Rule Engine 방식 개선: Risk Score vs Boolean 판단
+- Unity 기반 3D 시각화 시도
+- Flask → FastAPI 전환 여부 검토
+- Firebase vs MySQL 선택 마무리
 
 ## 🧠 현재까지의 프로젝트 이해 (Gemini)
 
 이 문서는 Gemini가 프로젝트의 현재 상태와 핵심 로직에 대해 이해하고 있는 내용을 요약합니다. 다음 세션에서 원활한 협업을 위해 지속적으로 업데이트됩니다.
 
-### 1. 위험 구역 관리 시스템 개편 (최신 업데이트)
-
-- **저장소**: 위험 구역 데이터의 영구 저장소가 로컬 `danger_zones.json` 파일에서 **Google Firestore**로 이전되었습니다. 이를 통해 중앙 관리, 실시간 업데이트, 확장성을 확보했습니다.
-- **핵심 모듈**:
-    - **`ZoneService` (`server/services/zone_service.py`)**: Firestore의 `danger_zones` 컬렉션에 대한 CRUD(Create, Read, Update, Delete) 로직을 전담합니다.
-    - **`zone_api` (`server/routes/zone_api.py`)**: 외부(React 프론트엔드 등)에서 위험 구역을 관리할 수 있도록 `GET`, `POST`, `PUT`, `DELETE` API 엔드포인트를 제공합니다.
-    - **`DangerZoneMapper` (`detect/danger_zone_mapper.py`)**: 이제 `ZoneService`를 통해 DB에서 직접 위험 구역 정보를 로드합니다. Firestore의 데이터 형식(`map`의 배열)을 Python에서 사용하는 `list`의 `list`로 변환하는 로직을 포함합니다.
-- **데이터 형식**: Firestore에는 2차원 배열을 직접 저장할 수 없으므로, `points` 필드는 **`map`의 배열** (Array of Maps) 형태로 저장하는 것을 표준으로 정립했습니다. 각 `map`은 `{ '0': x_좌표, '1': y_좌표 }` 구조를 가집니다.
-
-### 2. Firestore 연결 중앙화 및 의존성 관리 (최신 업데이트)
-
-- **중앙 초기화**: `firebase_admin.initialize_app()` 호출은 이제 `server/app.py`의 `lifespan` 함수에서 서버 시작 시 **단 한 번만** 수행됩니다. 생성된 `firestore.client()` 객체는 `app.state.db`에 저장되어 애플리케이션 전반에 걸쳐 공유됩니다.
-- **의존성 주입**: `server/dependencies.py`는 `app.state.db`에서 공유된 DB 클라이언트 객체를 가져와 `ZoneService`와 `DBService` 인스턴스에 주입하는 역할을 합니다. 이로써 각 서비스는 DB 연결 로직에 대해 알 필요 없이 비즈니스 로직에만 집중할 수 있습니다.
-- **서비스 단순화**: `server/services/db_service.py`와 `server/services/zone_service.py`는 더 이상 자체적으로 Firebase를 초기화하거나 인증서 경로를 관리하지 않습니다. 생성자에서 이미 초기화된 `firestore.client()` 객체를 인자로 받습니다.
-- **Facade 주입**: `server/app.py`에서 `ServiceFacade`와 `Detector`를 초기화할 때, 이미 생성된 `DBService` 및 `ZoneService` 인스턴스를 직접 주입합니다. 이는 Facade 계층이 필요한 서비스 인스턴스를 명확히 전달받도록 하여 결합도를 낮춥니다.
-
-### 3. 핵심 요구사항 재정의 및 이해
-
-*   **작업 모드 정의의 명확화**:
-    *   **`operating` 모드 (정형 작업)**: 컨베이어 벨트가 현재 작동 중인 상태.
-        *   목표: 위험 상황 발생 시 **감속** 또는 **정지**를 통해 사고 예방.
-    *   **`stopped` 모드 (비정형 작업)**: 컨베이어 벨트가 현재 정지 중인 상태.
-        *   목표: 위험 구역 내 사람 감지 또는 특정 센서 알림 시 **전원 투입을 절대적으로 방지 (LOTO 기능)**. 이는 시스템의 최우선 안전 목표입니다.
-*   **센서 데이터의 중요성**: `InputAdapter`를 통해 들어오는 센서 데이터(특히 컨베이어 벨트 작동 상태)는 작업 모드 판단 및 위험 평가에 필수적인 요소입니다.
-
-### 4. Logic Layer의 상세 역할 및 흐름 (재설계 반영)
-
-Logic Layer는 `InputAdapter`와 `Detection Layer`로부터 받은 데이터를 기반으로 시스템의 핵심 안전 판단을 수행하며, `Control Layer`로 전달할 최종 명령을 결정합니다.
-
-*   **`RiskEvaluator` (`logic/risk_evaluator.py`)**:
-    *   **역할**: `Detection Layer`의 결과(사람, 자세, 위험 구역 침입)와 `InputAdapter`의 **센서 데이터**를 종합하여 잠재적인 위험도를 평가하고 정량화합니다.
-    *   **입력**: `detection_result` (사람, 자세, 위험 구역 정보), `sensor_data` (센서 알림 상태 포함).
-    *   **출력**: `risk_level` (safe, medium, high, critical) 및 `risk_score`, 상세 위험 요소 목록.
-
-*   **`ModeManager` (`logic/mode_manager.py`)**:
-    *   **역할**: 컨베이어 벨트의 현재 작동 상태를 기반으로 시스템의 작업 모드를 결정합니다.
-    *   **입력**: `is_conveyor_operating` (컨베이어 작동 여부 - `InputAdapter`의 센서 데이터에서 파생).
-    *   **출력**: 현재 작업 모드 (`'operating'` 또는 `'stopped'`).
-
-*   **`RuleEngine` (`logic/rule_engine.py`)**:
-    *   **역할**: `ModeManager`가 판단한 작업 모드와 `RiskEvaluator`가 평가한 위험도를 종합하여, 시스템이 취해야 할 최종 제어 명령 목록을 결정합니다.
-    *   **핵심 규칙**:
-        *   **IF `mode` is `'stopped'` (컨베이어 정지 상태)**:
-            *   **AND** `risk_level` is not `'safe'` (위험 구역 내 사람 감지 또는 센서 알림 등):
-                *   **Action**: `PREVENT_POWER_ON` (LOTO), `TRIGGER_ALARM_CRITICAL`, `LOG_LOTO_ACTIVE`.
-            *   **ELSE** (`risk_level` is `'safe'`):
-                *   **Action**: `ALLOW_POWER_ON`, `LOG_STOPPED_SAFE`.
-        *   **IF `mode` is `'operating'` (컨베이어 작동 상태)**:
-            *   **IF** `risk_level` is `'critical'` (예: 넘어짐, 심각한 자세 이상):
-                *   **Action**: `STOP_POWER`, `TRIGGER_ALARM_CRITICAL`, `LOG_CRITICAL_INCIDENT`.
-            *   **IF** `risk_level` is `'high'` (예: 위험 구역 침입):
-                *   **Action**: `SLOW_DOWN_50_PERCENT`, `TRIGGER_ALARM_HIGH`, `LOG_HIGH_RISK`.
-            *   **IF** `risk_level` is `'medium'`:
-                *   **Action**: `TRIGGER_ALARM_MEDIUM`, `LOG_MEDIUM_RISK`.
-            *   **ELSE** (`risk_level` is `'safe'`):
-                *   **Action**: `LOG_NORMAL_OPERATION`.
-    *   **공통**: 모든 위험 상황에 대해 `NOTIFY_UI` 액션 포함.
-
-*   **`LogicFacade` (`logic/logic_facade.py`)**:
-    *   **역할**: `RiskEvaluator`, `ModeManager`, `RuleEngine`의 복잡한 상호작용을 외부로부터 숨기는 통합 인터페이스.
-    *   **입력**: `detection_result` (from `Detector`), `sensor_data` (from `InputAdapter`).
-    *   **흐름**: `sensor_data`에서 컨베이어 작동 상태를 추출하여 `ModeManager`에 전달하고, `detection_result`와 `sensor_data`를 `RiskEvaluator`에 전달한 후, 최종적으로 `RuleEngine`을 통해 결정된 행동 목록을 반환합니다.
 ### 1. Detection Layer의 상세 역할 및 흐름
 
 *   **`PersonDetector`**: `yolov8n.pt`를 사용하여 프레임 내의 모든 '사람' 객체를 탐지하고 바운딩 박스를 반환합니다.
@@ -216,3 +141,61 @@ Logic Layer는 `InputAdapter`와 `Detection Layer`로부터 받은 데이터를 
     *   이 과정을 통해 `fall_det_1.pt` 모델 자체의 성능보다는, 여러 근거를 복합적으로 해석하고 예외 케이스를 처리하는 **분석 로직의 정교함**이 오탐지 방지에 더 중요하다는 것을 확인했습니다.
 *   **컨베이어 작동 상태 센서 데이터 연동**: `Logic Layer`의 `ModeManager`가 정확히 동작하려면, 실제 컨베이어의 작동 상태를 나타내는 센서 데이터(`conveyor_operating`)를 `InputAdapter`를 통해 수신하고 `LogicFacade`에서 올바르게 파싱하는 작업이 필요합니다. (현재는 로직상 가정)
 *   **테스트 케이스 확장**: 현재의 테스트 이미지 외에, 다양한 각도와 조명, 여러 사람이 겹치는 상황 등 더 복잡한 시나리오에 대한 테스트 케이스를 확보하여 시스템의 강건성을 검증할 필요가 있습니다.
+
+---
+## 🚀 통합 테스트 계획: 단계별 검증
+
+가장 효율적이고 문제 파악이 쉬운 방법은 가장 말단(제어 계층)부터 거꾸로 확인해 나가는 것입니다.
+
+---
+
+### 1단계: 제어 계층(Control Layer) 단독 테스트
+
+- **목표**: SpeedController가 아두이노로 속도 제어 신호를 정상적으로 보내는지 확인합니다.
+- **방법**:
+    1. `test/test_arduino.py`와 같은 간단한 테스트 스크립트를 만듭니다.
+    2. 이 스크립트에서 `control/speed_controller.py`의 SpeedController 객체를 직접 생성합니다.
+    3. `controller.set_speed(50)` 이나 `controller.set_speed(0)` 같은 메서드를 강제로 호출합니다.
+    4. 실제 아두이노의 LED나 모터가 이에 반응하는지, 또는 시리얼 모니터에 예상된 값이 출력되는지 물리적으로 확인합니다.
+- **이점**: 이 단계가 성공하면, 하드웨어 연결 및 제어 신호 자체에는 문제가 없음을 확신할 수 있습니다.
+
+---
+
+### 2단계: 로직 계층(Logic Layer) -> 제어 계층(Control Layer) 연동 테스트
+
+- **목표**: 로직 계층이 생성한 제어 명령('SLOW_DOWN_50_PERCENT')이 제어 계층으로 잘 전달되어 실제 아두이노를 움직이는지 확인합니다.
+- **방법**:
+    1. 새로운 테스트 스크립트(`test/test_logic_to_control.py`)를 만듭니다.
+    2. 이 스크립트에서 `logic/logic_facade.py`와 `control/control_facade.py`를 모두 임포트합니다.
+    3. 가짜(mock) 탐지 데이터를 직접 만듭니다. 예를 들어:
+       ```python
+       mock_detection_result = {"person_in_zone": True, "is_falling": False, ...}
+       mock_sensor_data = {"is_conveyor_operating": True}
+       ```
+    4. 이 가짜 데이터를 `logic_facade.process()`에 입력하여 제어 명령 리스트를 얻습니다.
+    5. 반환된 명령 리스트(`['SLOW_DOWN_50_PERCENT', ...]`)를 `control_facade.execute()`에 전달합니다.
+    6. 1단계와 마찬가지로, 실제 아두이노가 감속하는지 확인합니다.
+- **이점**: 탐지 부분을 제외한, 시스템의 핵심 두뇌(로직)와 팔다리(제어)가 잘 연결되어 동작하는지 검증할 수 있습니다.
+
+---
+
+### 3단계: 탐지 계층(Detection Layer) -> 로직 계층(Logic Layer) 연동 테스트
+
+- **목표**: 실제 영상에서 사람과 ROI를 탐지한 결과가 로직 계층으로 정확히 전달되는지 확인합니다.
+- **방법**:
+    1. `test/test_detect_to_logic.py` 와 같은 스크립트를 만듭니다.
+    2. `detect/detect_facade.py`와 `logic/logic_facade.py`를 임포트합니다.
+    3. 실제 카메라나 테스트 영상을 입력으로 `detect_facade.detect()`를 실행합니다.
+    4. 반환된 `detection_result`를 `logic_facade.process()`에 전달합니다.
+    5. `logic_facade`가 반환하는 최종 제어 명령 리스트가 예상대로 `'SLOW_DOWN_50_PERCENT'`인지 print문으로 확인합니다. (이 단계에서는 실제 아두이노 제어는 하지 않아도 됩니다.)
+- **이점**: 실제 탐지 결과가 올바른 로직 판단으로 이어지는지 확인할 수 있습니다.
+
+---
+
+### 4단계: 전체 통합 테스트
+
+- **목표**: 처음부터 끝까지 전체 시스템이 정상 동작하는지 최종 확인합니다.
+- **방법**:
+    1. `main.py` 또는 `test/test_detect_layer.py`와 같은 최상위 통합 테스트 스크립트를 실행합니다.
+    2. 카메라 앞에서 사용자가 직접 위험 구역(ROI) 안으로 들어갑니다.
+    3. 실제 컨베이어 벨트(또는 모터)의 속도가 줄어드는지 눈으로 최종 확인합니다.
