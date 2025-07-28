@@ -11,17 +11,17 @@ class PoseDetector:
     두 모델의 결과를 AND 조건으로 결합하여 넘어짐 상태를 정밀하게 탐지합니다.
     """
 
-    def __init__(self, conf_threshold=0.5):
+    def __init__(self, pose_model_path='yolov8n-pose.pt', fall_model_path='fall_det_1.pt', conf_threshold=0.5):
         """
         자세 탐지기 초기화. 2개의 모델을 로드합니다.
         1. self.pose_model: 사람의 관절과 바운딩 박스 탐지용
         2. self.fall_model: 'Fall-Detected' 클래스 탐지용
         """
         try:
-            self.pose_model = YOLO('yolov8n-pose.pt')
-            self.fall_model = YOLO('fall_det_1.pt')
+            self.pose_model = YOLO(pose_model_path)
+            self.fall_model = YOLO(fall_model_path)
             self.conf_threshold = conf_threshold
-            logger.info("PoseDetector 초기화 완료: pose_model(yolov8n-pose.pt), fall_model(fall_det_1.pt) 로드 완료")
+            logger.info(f"PoseDetector 초기화 완료: pose_model({pose_model_path}), fall_model({fall_model_path}) 로드 완료")
         except Exception as e:
             logger.error(f"PoseDetector 초기화 중 모델 로드 실패: {e}")
             raise
@@ -123,7 +123,7 @@ class PoseDetector:
                     hip_y = (l_hip[1] + r_hip[1]) / 2
                     torso_vertical_dist = abs(hip_y - shoulder_y)
 
-                    if torso_vertical_dist < bbox_height * 0.5:
+                    if torso_vertical_dist < bbox_height * 0.05:
                         is_torso_horizontal = True
             except (KeyError, ZeroDivisionError):
                 pass
