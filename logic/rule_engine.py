@@ -1,5 +1,6 @@
 from typing import Dict, Any, List
 from loguru import logger
+from datetime import datetime
 
 class RuleEngine:
     """
@@ -65,6 +66,23 @@ class RuleEngine:
 
         # 모든 위험 상황에 대해 UI 알림
         if risk_level != "safe":
-            actions.append({"type": "NOTIFY_UI", "details": {"message": f"Risk detected: {risk_level.upper()}!", "risk_level": risk_level, "risk_details": risk_details}})
+            # 상세한 알림 메시지 생성
+            if isinstance(risk_details, dict):
+                reason = ', '.join(risk_details.keys())
+            elif isinstance(risk_details, str):
+                reason = risk_details
+            else:
+                reason = "알 수 없는 원인"
+            
+            alert_message = f"위험 수준 '{risk_level.upper()}' 감지. 원인: {reason}"
+            
+            # 웹소켓으로 보낼 상세 정보 구성 (AlertMessage 모델 형식 준수)
+            notification_details = {
+                "type": "SYSTEM_ALERT",
+                "level": risk_level,
+                "message": alert_message,
+                "timestamp": datetime.now().isoformat() # ISO 8601 형식으로 변환
+            }
+            actions.append({"type": "NOTIFY_UI", "details": notification_details})
 
         return actions

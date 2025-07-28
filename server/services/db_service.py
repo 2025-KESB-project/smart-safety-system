@@ -1,126 +1,92 @@
-
-
-import firebase_admin
-from firebase_admin import credentials, firestore
-import os
-from datetime import datetime, timezone
+import asyncio
+from typing import Dict, Any
 from loguru import logger
+from datetime import datetime
+from firebase_admin import firestore
+from google.cloud.firestore_v1.client import Client
+from pydantic import ValidationError
+
+from .alert_service import ConnectionManager
+from server.models.websockets import LogMessage # LogMessage 모델 임포트
 
 class DBService:
-    def __init__(self, credential_path):
+    """
+    Firestore 데이터베이스 작업을 관리하고,
+    새로운 로그 발생 시 Pydantic 모델로 검증 후 WebSocket으로 실시간 브로드캐스팅합니다.
+    """
+
+    def __init__(self, db: Client, loop: asyncio.AbstractEventLoop):
         """
-        Initializes the Firebase Admin SDK and Firestore client.
-        :param credential_path: Path to the Firebase service account key file.
+        DBService를 초기화합니다.
         """
-        if not firebase_admin._apps:
-            try:
-                cred = credentials.Certificate(credential_path)
-                firebase_admin.initialize_app(cred)
-                logger.success("Firebase Admin SDK initialized successfully.")
-            except Exception as e:
-                logger.error(f"Error initializing Firebase Admin SDK: {e}")
-                raise
+        if not isinstance(db, Client):
+            raise TypeError("db must be an instance of google.cloud.firestore_v1.client.Client")
         
-        self.db = firestore.client()
-        logger.success("Firestore client created successfully.")
+        self.db = db
+        self.loop = loop
+        self.collection_name = 'event_logs'
+        self.log_connection_manager = ConnectionManager()
+        
+        logger.success("DBService 초기화 완료 (Pydantic 검증 기능 포함).")
 
-    def get_status(self):
-        """
-        Checks the status of the Firestore client.
-        """
-        if self.db:
-            return {"status": "connected"}
-        else:
-            return {"status": "disconnected", "reason": "Firestore client not initialized."}
+    def get_status(self) -> dict:
+        """Firestore 클라이언트의 상태를 확인합니다."""
+        return {
+            "status": "connected" if self.db else "disconnected",
+            "details": f"Connected to collection '{self.collection_name}'" if self.db else "Firestore client not provided.",
+            "live_log_clients": len(self.log_connection_manager.active_connections)
+        }
 
-    def log_event(self, event_type: str, risk_level: str, details: dict):
+    def log_event(self, event_data: Dict[str, Any]):
         """
-        Logs an event to the 'event_logs' collection in Firestore.
-
-        :param event_type: The type of the event (e.g., 'LOG_LOTO_ACTIVE').
-        :param risk_level: The risk level associated with the event.
-        :param details: A dictionary containing detailed information about the event.
+        Firestore에 이벤트를 기록하고, Pydantic 모델로 검증 후
+        연결된 모든 클라이언트에게 브로드캐스트합니다.
         """
         try:
-            doc_ref = self.db.collection('event_logs').document()
-            event_data = {
-                'timestamp': datetime.now(timezone.utc).isoformat(),
-                'event_type': event_type,
-                'risk_level': risk_level,
-                'details': details
-            }
-            doc_ref.set(event_data)
-            # 로그 레벨을 INFO로 변경하여 일반적인 성공 로그로 처리
-            logger.info(f"Successfully logged event: {event_type}")
-            return doc_ref.id
-        except Exception as e:
-            logger.error(f"Error logging event to Firestore: {e}")
-            return None
+            # 1. 웹소켓으로 보낼 데이터 준비 및 검증
+            #    - 타임스탬프가 없으면 현재 시간으로 추가
+            if 'timestamp' not in event_data:
+                event_data['timestamp'] = datetime.now().isoformat()
 
-    def get_events(self, limit: int = 50):
-        """
-        Retrieves the latest events from the 'event_logs' collection.
+            # Pydantic 모델로 데이터 유효성 검사
+            try:
+                log_message = LogMessage(**event_data)
+                # 모델을 JSON 직렬화 가능한 딕셔너리로 변환
+                validated_data = log_message.model_dump()
+                logger.success(f"로그 데이터 검증 성공: {log_message.event_type}")
+            except ValidationError as e:
+                logger.error(f"웹소켓 로그 데이터 검증 실패: {e}")
+                # 검증에 실패하면 프론트엔드로 보내지 않음
+                return
 
-        :param limit: The maximum number of events to retrieve.
-        :return: A list of event documents, or an empty list in case of an error.
-        """
-        try:
-            docs = self.db.collection('event_logs').order_by(
-                'timestamp', direction=firestore.Query.DESCENDING
-            ).limit(limit).stream()
+            # 2. DB에 데이터 저장 (타임스탬프는 서버 시간으로)
+            event_data_for_db = event_data.copy()
+            event_data_for_db['timestamp'] = firestore.SERVER_TIMESTAMP
+            collection_ref = self.db.collection(self.collection_name)
+            collection_ref.add(event_data_for_db)
+            logger.info(f"이벤트 로그 DB 저장 성공: {event_data.get('event_type')}")
+
+            # 3. 검증된 데이터를 실시간 방송
+            coro = self.log_connection_manager.broadcast(validated_data)
+            asyncio.run_coroutine_threadsafe(coro, self.loop)
             
+        except Exception as e:
+            logger.error(f"이벤트 로그 저장 또는 방송 중 오류 발생: {e}")
+
+    def get_events(self, limit: int = 50) -> list:
+        """Firestore에서 최근 이벤트 목록을 가져옵니다."""
+        try:
+            collection_ref = self.db.collection(self.collection_name)
+            query = collection_ref.order_by('timestamp', direction=firestore.Query.DESCENDING).limit(limit)
+            
+            docs = query.stream()
             events = []
             for doc in docs:
-                event_data = doc.to_dict()
-                event_data['id'] = doc.id
-                events.append(event_data)
-            
-            logger.debug(f"Successfully retrieved {len(events)} events.")
+                event = doc.to_dict()
+                if 'timestamp' in event and hasattr(event['timestamp'], 'isoformat'):
+                    event['timestamp'] = event['timestamp'].isoformat()
+                events.append(event)
             return events
         except Exception as e:
-            logger.error(f"Error retrieving events from Firestore: {e}")
+            logger.error(f"이벤트 로그 조회 중 오류 발생: {e}")
             return []
-
-# Example of how to get the credential path dynamically
-# This assumes the script is run from the project root.
-# In our actual app, the path will be managed by the ServiceFacade.
-def get_credential_path():
-    return os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'firebase_credential.json')
-
-if __name__ == '__main__':
-    # Example usage for testing
-    try:
-        # 테스트 스크립트에서는 logger를 직접 설정해줘야 출력을 볼 수 있습니다.
-        from loguru import logger
-        import sys
-        logger.add(sys.stderr, level="INFO")
-
-        cred_path = get_credential_path()
-        if not os.path.exists(cred_path):
-            raise FileNotFoundError(f"Firebase credential file not found at: {cred_path}")
-            
-        db_service = DBService(credential_path=cred_path)
-        
-        # Example event
-        test_event_details = {
-            "reason": "test_event_from_script",
-            "risk_details": [
-                {"type": "test", "description": "This is a test event."}
-            ]
-        }
-        
-        logger.info("\nLogging a test event...")
-        event_id = db_service.log_event(
-            event_type="LOG_TEST_EVENT",
-            risk_level="info",
-            details=test_event_details
-        )
-        
-        if event_id:
-            logger.info(f"Test event logged with document ID: {event_id}")
-        else:
-            logger.error("Failed to log test event.")
-            
-    except Exception as e:
-        logger.error(f"An error occurred during the test run: {e}")
-

@@ -1,59 +1,85 @@
+
 import cv2
 import numpy as np
-import json
 from typing import List, Dict, Any, Tuple
 from loguru import logger
+
+# 의존성 주입을 위해 ZoneService를 import 합니다.
+# 실제 애플리케이션에서는 FastAPI의 Depends 등을 통해 주입받게 됩니다.
+from server.services.zone_service import ZoneService
 
 class DangerZoneMapper:
     """다각형 위험 구역을 설정하고, 사람의 침입 여부를 정교하게 판단합니다."""
 
-    def __init__(self, zone_config_path: str = None):
+    def __init__(self, zone_service: ZoneService = None):
         """
-        위험 구역 매퍼를 초기화하고 설정 파일에서 구역 정보를 로드합니다.
+        위험 구역 매퍼를 초기화합니다.
+        이제 ZoneService를 직접 주입받아 DB와 통신합니다.
 
         Args:
-            zone_config_path: 위험 구역 설정이 담긴 JSON 파일 경로
+            zone_service: Firestore와 통신하는 ZoneService 인스턴스
         """
         self.danger_zones = []
-        if zone_config_path:
-            self.load_zones_from_config(zone_config_path)
+        self.zone_service = zone_service
+        if self.zone_service:
+            self.load_zones_from_db()
         else:
-            logger.warning("위험 구역 설정 파일이 제공되지 않았습니다.")
+            # zone_service가 제공되지 않은 경우 (예: 단독 테스트)
+            logger.warning("ZoneService가 제공되지 않았습니다. DB에서 위험 구역을 로드할 수 없습니다.")
 
-    def load_zones_from_config(self, config_path: str):
-        """설정 파일(JSON)로부터 위험 구역들을 불러옵니다."""
+    def load_zones_from_db(self):
+        """Firestore DB로부터 위험 구역들을 불러옵니다."""
+        if not self.zone_service:
+            logger.error("ZoneService가 없어 DB에서 구역 정보를 가져올 수 없습니다.")
+            return
+        
         try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                zones_data = json.load(f)
-                for zone_data in zones_data:
-                    self.add_zone(zone_data)
-            logger.info(f"'{config_path}'에서 {len(self.danger_zones)}개의 위험 구역을 로드했습니다.")
-        except FileNotFoundError:
-            logger.error(f"위험 구역 설정 파일을 찾을 수 없습니다: {config_path}")
+            zones_data = self.zone_service.get_all_zones()
+            if not zones_data:
+                logger.warning("DB에 설정된 위험 구역이 없습니다.")
+                self.danger_zones = []
+                return
+
+            # 기존 구역 정보 초기화
+            self.danger_zones = []
+            for zone_data in zones_data:
+                self.add_zone(zone_data)
+            
+            logger.info(f"DB에서 {len(self.danger_zones)}개의 위험 구역을 성공적으로 로드했습니다.")
+
         except Exception as e:
-            logger.error(f"위험 구역 설정 파일 로드 중 오류 발생: {e}")
+            logger.error(f"DB에서 위험 구역 로드 중 심각한 오류 발생: {e}")
 
     def add_zone(self, zone_data: Dict[str, Any]):
-        """다양한 형태의 위험 구역을 추가합니다."""
+        """메모리에 위험 구역을 추가합니다. (DB 저장 X)"""
         try:
-            zone_id = zone_data['id']
-            zone_name = zone_data['name']
-            #points = 꼭짓점
-            points = np.array(zone_data['points'], dtype=np.int32)
-            # 침입 판단을 위한 임계값 (기본값: 20% 이상 겹치면 침입으로 간주)
-            # Intersection over Union (IoU) 임계값
+            zone_id = zone_data.get('id', 'N/A')
+            zone_name = zone_data.get('name', 'Unknown Zone')
+            
+            # Firestore에서 받은 딕셔너리 리스트를 NumPy 배열로 변환
+            # e.g., [{'0': 100, '1': 100}, ...] -> [[100, 100], ...]
+            points_list = [[p['0'], p['1']] for p in zone_data['points']]
+            points = np.array(points_list, dtype=np.int32)
+            
             iou_threshold = zone_data.get('iou_threshold', 0.2)
+
+            # points가 비어있는 경우 예외 처리
+            if points.size == 0:
+                logger.warning(f"Zone '{zone_name}' ({zone_id}) has no points.")
+                return
 
             zone = {
                 "id": zone_id,
                 "name": zone_name,
                 "points": points,
                 "iou_threshold": iou_threshold,
-                "bounding_rect": cv2.boundingRect(points) # 시각화 및 최적화용
+                "bounding_rect": cv2.boundingRect(points)
             }
             self.danger_zones.append(zone)
         except KeyError as e:
-            logger.error(f"설정 파일의 위험 구역 데이터에 필수 키가 없습니다: {e}")
+            logger.error(f"위험 구역 데이터에 필수 키가 없습니다: {e}. 데이터: {zone_data}")
+        except Exception as e:
+            logger.error(f"위험 구역 추가 중 오류 발생: {e}")
 
     def check_person_in_zone(self, person_bbox: List[int], zone: Dict[str, Any]) -> Tuple[bool, float]:
         """
@@ -81,7 +107,6 @@ class DangerZoneMapper:
                 return True, 1.0 # 주요 포인트가 하나라도 들어가면 즉시 침입으로 확정
 
         # --- 2단계: 정교한 교차 영역(Intersection) 계산 ---
-        # 포인트 검사를 통과했다는 것은, 특수한 케이스일 가능성이 있다는 의미
         try:
             person_area = (px2 - px1) * (py2 - py1)
             if person_area == 0: return False, 0.0
@@ -131,13 +156,11 @@ class DangerZoneMapper:
             persons_in_zone = []
             for i, person in enumerate(persons):
                 is_in, iou = self.check_person_in_zone(person["bbox"], zone)
-                # 사람이 20프로 이상 위험 구역에 겹칠 경우
                 if is_in:
                     persons_in_zone.append({
                         "person_index": i,
                         "bbox": person["bbox"],
                         "confidence": person["confidence"],
-                        #round = 반올림..
                         "intrusion_iou": round(iou, 2)
                     })
             

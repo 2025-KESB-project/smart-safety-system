@@ -1,3 +1,4 @@
+
 import cv2
 import numpy as np
 from typing import Dict, Any, List
@@ -6,26 +7,27 @@ from loguru import logger
 from .person_detector import PersonDetector
 from .pose_detector import PoseDetector
 from .danger_zone_mapper import DangerZoneMapper
+from server.services.zone_service import ZoneService
 
 class Detector:
     """모든 하위 탐지 모듈을 총괄하고, 종합적인 탐지 결과를 반환하는 클래스."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], zone_service: ZoneService):
         """
         Detector를 초기화하고 모든 하위 탐지기를 설정합니다.
+        ZoneService는 외부(app.py)에서 주입받아 DangerZoneMapper에 전달합니다.
 
         Args:
             config: 전체 탐지기 설정을 담은 딕셔너리
-                    e.g., {
-                        'person_detector': {'model_path': '...'},
-                        'pose_detector': {'model_path': '...'},
-                        'danger_zone_mapper': {'zone_config_path': '...'}
-                    }
+            zone_service: 초기화된 ZoneService 인스턴스
         """
         try:
             self.person_detector = PersonDetector(**config.get('person_detector', {}))
             self.pose_detector = PoseDetector(**config.get('pose_detector', {}))
-            self.danger_zone_mapper = DangerZoneMapper(**config.get('danger_zone_mapper', {}))
+            
+            # 주입받은 ZoneService를 사용하여 DangerZoneMapper 초기화
+            self.danger_zone_mapper = DangerZoneMapper(zone_service=zone_service)
+            
             logger.info("Detector 및 모든 하위 탐지기 초기화 완료")
         except Exception as e:
             logger.error(f"Detector 초기화 중 심각한 오류 발생: {e}")
