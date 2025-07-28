@@ -20,8 +20,11 @@ INPUT_CONFIG = {
 # Detector 설정
 DETECTOR_CONFIG = {
     'person_detector': {'model_path': 'yolov8n.pt'},
-    'pose_detector': {'model_path': 'yolov8n-pose.pt'},
-    'danger_zone_mapper': {'zone_config_path': ':detect/danger_zones.json'}
+    'pose_detector': {
+        'pose_model_path': 'yolov8n-pose.pt',
+        'fall_model_path': 'fall_det_1.pt'
+    },
+    'danger_zone_mapper': {'zone_config_path': 'detect/danger_zones.json'}
 }
 
 WINDOW_NAME = "Input -> Detect Layer Test"
@@ -35,6 +38,8 @@ def main():
         detector = Detector(DETECTOR_CONFIG)
         logger.success("InputAdapter와 Detector 초기화 완료.")
     except Exception as e:
+        import inspect, detect.pose_detector as pd
+        print("POSE FILE:", pd.__file__, "\nPOSE SIG :", inspect.signature(pd.PoseDetector.__init__))
         logger.error(f"모듈 초기화 실패: {e}")
         return
 

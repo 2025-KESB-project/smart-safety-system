@@ -10,13 +10,13 @@ from detect.detect_facade import Detector
 from detect.danger_zone_creator import ZoneCreator
 
 # --- 설정 ---
-CAMERA_INDEX = 3
+CAMERA_INDEX = 0
 CONFIG_FILE = "danger_zones.json"
 WINDOW_NAME = "test"
 
 DETECTOR_CONFIG = {
     'person_detector': {'model_path': 'yolov8n.pt'},
-    'pose_detector': {'model_path': 'yolov8n-pose.pt'},
+    'pose_detector': {},  # model_path 인자 제거
     'danger_zone_mapper': {'zone_config_path': CONFIG_FILE}
 }
 

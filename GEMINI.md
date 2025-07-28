@@ -17,123 +17,127 @@
 ---
 
 ## 🧱 시스템 구조 (Layer 구성)
-* 각 계층은 명확한 책임 분리 원칙(SRP)을 따르며, Facade 패턴을 통해 상호작용합니다.
 
 ### 1. Input Layer
 - CCTV, 웹캠 → OpenCV로 실시간 프레임 수신 및 전처리
-- 모듈: `input_adapter/`
+- 센서 입력 (초음파, IR 등)
+- 모듈: `stream.py`, `preprocess.py`, `sensor.py`, `adapter.py`
 
 ### 2. Detection Layer
-- `person_detector`, `pose_detector`, `danger_zone_mapper`를 통해 영상에서 위험 요소를 탐지합니다.
-- 모듈: `detect/`
+- `person_detector`: 사람 탐지 (YOLOv8)
+- `pose_detector`: OpenPose 기반 자세 이상 판단
+- `hand_gesture_detector`: 위험 손 모양 감지
+- `danger_zone_mapper`: 지정 위험 구역 내 객체 감지
+- 결과는 `detector.py`를 통해 Logic Layer에 전달
 
 ### 3. Logic Layer
-- `risk_evaluator`, `mode_manager`, `rule_engine`을 통해 시스템의 상태와 위험도를 판단하고, 최종 행동을 결정합니다.
-- 모듈: `logic/`
+- `risk_evaluator`: 위험 점수 계산
+- `mode_manager`: 작업 모드 판단 (정형/비정형)
+- `rule_engine`: 위험 판단 (Safe / Warn / Stop)
+- 제어 명령 및 알림 분기 처리
 
 ### 4. Control Layer
-- `alert_controller`, `power_controller` 등 물리적 장치를 제어합니다. (현재는 Mock 모드)
-- 모듈: `control/`
+- `alert_controller`: 경광등, 부저 제어
+- `power_controller`: 전원 릴레이 제어
+- `speed_controller`: 속도 조절
+- `warning_device`: 기타 장치 제어
 
-### 5. Interface Layer (FastAPI)
-- **RESTful API**: 외부 시스템(UI, 관리 도구)과의 통신을 담당합니다. Pydantic 모델을 통해 모든 요청/응답 데이터의 구조를 명확히 정의합니다.
-- **WebSocket API**: 실시간 로그 및 긴급 경보를 UI에 푸시(Push)합니다.
-- 모듈: `server/`
+### 5. Interface Layer
+- FastAPI 서버 + JavaScript UI
+- 관리자 대시보드 제공
 
-### 6. DB Layer (Firestore)
-- **이벤트 로그**: 모든 시스템 이벤트를 `event_logs` 컬렉션에 저장합니다.
-- **위험 구역 설정**: 다각형 위험 구역 정보를 `danger_zones` 컬렉션에 저장합니다.
-
----
-
-## ⚠️ 주요 에러 및 해결된 이슈
-
-- **(해결) API 구조 및 실시간 통신 시스템 전면 개선 (2025-07-28)**:
-    - **문제점**: API 구조가 직관적이지 않고, 5초 폴링 방식의 비효율적인 로그 조회 시스템을 사용하고 있었음.
-    - **해결**: RESTful 원칙에 따라 API 구조를 리팩토링하고, WebSocket 기반의 실시간 통신 아키텍처를 도입하여 시스템 전체의 반응성과 효율성을 극대화함. (상세 내용은 하단 Gemini 이해 섹션 참고)
-
-- **(해결) `TypeError` 및 `AttributeError`**:
-    - **문제점**: `db_service.log_event` 호출 시 잘못된 인자 전달, `rule_engine`에서 딕셔너리가 아닌 객체에 `.keys()` 호출.
-    - **해결**: `log_event` 호출 방식을 수정하고, `rule_engine`에 타입 체크 로직을 추가하여 안정성 확보.
-
-- **(해결) `EOFError: Ran out of input`**:
-    - **문제점**: `torch.load` 실행 시 모델 파일(`.pt`)을 읽지 못함. Git 작업 중 바이너리 파일이 손상된 것으로 추정.
-    - **해결**: 손상된 `yolov8n-pose.pt` 파일을 삭제하고, 공식 소스에서 새로 다운로드하여 문제 해결.
-
-- **(해결) 위험 구역 데이터 관리 방식 개선**: Firestore DB로 이전하여 확장성 및 중앙 관리 확보.
-- **(해결) Firestore 연결 중앙화**: `app.py`의 `lifespan`에서 DB 연결을 중앙 관리하도록 수정.
+### 6. DB Layer
+- 감지/판단/경고 기록 저장
+- MySQL 또는 Firebase 사용 예정
 
 ---
 
-## 📁 폴더 구조 (2025.07-28 기준)
+## ⚠️ 주요 에러 및 이슈
+
+- YOLOv8 예측 결과 관련 오류 (`stream=True` → generator 반환 이슈)
+- **자세 탐지 오탐지 문제**: '팔 벌리고 쪼그려 앉은 자세'를 '넘어짐'으로 오탐지하는 이슈 발생.
+  - **원인**: BBox 비율 조건과 넘어짐 모델의 오인이 결합되어 발생.
+  - **해결**: '끼임/웅크림'을 우선 판단하고, 해당 시 넘어짐 판단을 생략하는 방식으로 로직 고도화.
+- 테스트 시 모듈 import 에러 발생
+- **Git Stash 충돌**: `detect/pose_detector.py` 파일에서 Stash 적용 중 충돌 발생. 최종 합의된 로직을 기준으로 수동 병합하여 해결.
+
+---
+
+## 📁 폴더 구조 (2025.07 기준)
 
 ```
 .
-├── ...
+├── input_adapter/
+│   ├── stream.py
+│   ├── preprocess.py
+│   ├── sensor.py
+│   └── adapter.py
+├── detect/
+│   ├── person_detector.py
+│   ├── pose_detector.py
+│   ├── hand_gesture_detector.py
+│   └── danger_zone_mapper.py
+├── logic/
+│   ├── mode_manager.py
+│   ├── risk_evaluator.py
+│   └── rule_engine.py
+├── control/
+│   ├── alert_controller.py
+│   ├── power_controller.py
+│   ├── speed_controller.py
+│   └── warning_device.py
 ├── server/
-│   ├── app.py              # FastAPI 앱 초기화 및 중앙 관리
-│   ├── dependencies.py     # 의존성 주입
-│   ├── models/             # Pydantic 모델 (데이터 설계도)
-│   │   ├── control.py
-│   │   ├── status.py
-│   │   ├── websockets.py
-│   │   └── zone.py
-│   ├── routes/             # API 엔드포인트 정의
-│   │   ├── alert_ws.py     # (구 websockets.py) 긴급 알림 WebSocket
-│   │   ├── control_api.py  # 시스템 제어 API
-│   │   ├── log_api.py      # (구 events.py) 과거 로그 조회 API
-│   │   ├── log_ws.py       # (구 log_stream.py) 실시간 로그 WebSocket
-│   │   ├── streaming.py
-│   │   └── zone_api.py
-│   └── services/           # 비즈니스 로직
-│       ├── alert_service.py
-│       ├── db_service.py   # DB 로직 + 실시간 로그 방송 기능
-│       └── zone_service.py
-└── ...
+│   ├── app.py
+│   ├── config.py
+│   ├── models/
+│   ├── routes/
+│   └── services/
+├── test/
+│   └── test_input_adapter.py
+├── verify_fall_model.py
 ```
 
 ---
 
 ## 🧭 향후 계획
 
-- **React 프론트엔드 연동**: 개선된 API(`log_api.py`, `zone_api.py`)와 WebSocket(`log_ws.py`, `alert_ws.py`)을 프론트엔드에 완전히 통합.
-- **(완료) 실시간 로그 업데이트**: 5초 폴링 방식을 WebSocket 기반 실시간 스트리밍으로 전환 완료.
-- **Failsafe 로직 강화**: UI 승인 없이는 절대 전원 불가 구조 고려.
-- **Rule Engine 방식 개선**: Risk Score vs Boolean 판단.
+- failsafe 로직 강화: UI 승인 없이는 절대 전원 불가 구조 고려
+- Rule Engine 방식 개선: Risk Score vs Boolean 판단
+- Unity 기반 3D 시각화 시도
+- Flask → FastAPI 전환 여부 검토
+- Firebase vs MySQL 선택 마무리
 
----
+## 🧠 현재까지의 프로젝트 이해 (Gemini)
 
-## 🧠 현재까지의 프로젝트 이해 (Gemini) - 2025-07-28 업데이트
+이 문서는 Gemini가 프로젝트의 현재 상태와 핵심 로직에 대해 이해하고 있는 내용을 요약합니다. 다음 세션에서 원활한 협업을 위해 지속적으로 업데이트됩니다.
 
-이 문서는 Gemini가 프로젝트의 최신 상태와 핵심 로직에 대해 이해하고 있는 내용을 요약합니다.
+### 1. Detection Layer의 상세 역할 및 흐름
 
-### 1. API 및 실시간 통신 시스템 전면 개선
+*   **`PersonDetector`**: `yolov8n.pt`를 사용하여 프레임 내의 모든 '사람' 객체를 탐지하고 바운딩 박스를 반환합니다.
+*   **`PoseDetector`**: **2개의 모델**을 사용하여 자세를 복합적으로 분석합니다.
+    1.  **`yolov8n-pose.pt`**: 사람의 주요 관절(keypoints)과 바운딩 박스를 탐지합니다.
+    2.  **`fall_det_1.pt`**: '넘어짐' 상태에 특화된 모델로, 'Fall-Detected' 클래스를 탐지합니다.
+*   **`_analyze_pose` (핵심 분석 로직)**: `PoseDetector` 내의 이 메서드는 오탐지를 최소화하고 정확도를 높이기 위해 **우선순위 기반 분석**을 수행합니다.
+    1.  **(1순위) 끼임/웅크림 분석**:
+        *   주요 관절(어깨, 엉덩이)의 위치를 기반으로 몸통의 수직 길이를 계산합니다.
+        *   이 길이가 전체 바운딩 박스 높이의 **30% 미만**이면 **'끼임/웅크림(Crouching)'**으로 즉시 판정하고 분석을 종료합니다.
+        *   **목적**: '팔 벌리고 쪼그려 앉은 자세'가 '넘어짐'으로 오탐지되는 것을 원천 차단합니다.
+    2.  **(2순위) 넘어짐 분석**:
+        *   '끼임/웅크림'이 아닐 경우에만 넘어짐 분석을 수행합니다.
+        *   **`is_model_falling` AND (`is_torso_horizontal` OR `is_ratio_falling`)** 이라는 유연한 복합 조건을 사용합니다.
+            *   **(필수)** `fall_det_1.pt`가 해당 인물을 'Fall-Detected'로 탐지해야 합니다.
+            *   **_AND_**
+            *   **(선택)** 몸통의 수직 길이가 전체 높이의 **25% 미만**으로 매우 짧거나(수평 상태), **_OR_** 바운딩 박스의 너비가 높이보다 **1.4배 이상**이어야 합니다.
+        *   **목적**: 실제 넘어진 다양한 자세(앞, 뒤, 옆)는 놓치지 않으면서, 서 있는 자세와의 오탐지를 최소화합니다.
 
-최근 세션을 통해 서버의 API 구조와 통신 방식이 대대적으로 개선되었습니다.
+### 2. Logic Layer의 역할 (기존과 동일)
 
-#### 1.1. RESTful API 설계 및 Pydantic 모델 전면 도입
+`Detection Layer`에서 정교하게 분석된 결과(`is_falling`, `is_crouching` 등)를 입력받아, 현재 작업 모드(`operating`/`stopped`)에 따라 최종 제어 명령(`STOP_POWER`, `SLOW_DOWN` 등)을 결정합니다.
 
-- **역할 기반 분리**: API의 역할과 책임에 따라 파일과 경로를 명확하게 분리했습니다.
-    - `events.py` → `log_api.py` (`/api/logs`): 과거 로그 조회 (HTTP)
-    - `streaming.py`에서 제어 기능 분리 → `control_api.py` (`/api/control`): 컨베이어 제어
-- **멱등성 보장**: `toggle` 방식의 API를 명시적인 `start`, `stop`으로 변경하여, 반복 호출 시에도 동일한 결과를 보장하는 안정적인 API를 구현했습니다.
-- **Pydantic 모델 적용**: 모든 주요 API(`logs`, `zones`, `control`, `status`)의 요청(Request) 및 응답(Response)을 Pydantic 모델로 엄격하게 정의했습니다.
-    - **장점 1 (자동 문서화)**: `/docs`의 API 문서가 매우 상세하고 명확해졌습니다.
-    - **장점 2 (데이터 안정성)**: 잘못된 형식의 데이터가 오고 가는 것을 원천적으로 차단합니다.
+### 3. 주요 이슈 및 향후 계획 (Gemini 관점)
 
-#### 1.2. 실시간 통신 아키텍처 구축 (WebSocket 도입)
-
-기존의 5초 주기 폴링(Polling) 방식을 완전히 폐기하고, WebSocket을 이용한 진정한 실시간 통신 아키텍처를 구축했습니다.
-
-- **"초기 로딩(HTTP) + 실시간 업데이트(WebSocket)" 모델**:
-    - **초기 로딩**: UI가 처음 열릴 때 `GET /api/logs`를 호출하여 과거 로그를 가져옵니다.
-    - **실시간 업데이트**: 이후 발생하는 모든 이벤트는 WebSocket을 통해 서버가 즉시 UI로 푸시(Push)합니다.
-- **채널 분리**: 목적에 따라 두 개의 독립된 WebSocket 채널을 운영합니다.
-    - **`/ws/logs` (`log_ws.py`)**: 모든 종류의 시스템 로그를 실시간으로 스트리밍하는 '뉴스 채널'.
-    - **`/ws/alerts` (`alert_ws.py`)**: 긴급 상황만 전송하는 '재난 문자 채널'.
-- **데이터 일관성**: `DBService`가 Firestore에 로그를 저장하는 즉시, 해당 로그를 `/ws/logs` 채널로 방송하도록 구현하여 DB와 UI 간의 데이터 일관성을 보장합니다.
-
-### 2. Firestore 연결 및 데이터 관리
-
-- **중앙 관리**: `app.py`의 `lifespan` 이벤트를 통해 서버 시작 시 단 한 번만 Firestore 연결을 초기화하고, 생성된 클라이언트 객체를 `app.state`를 통해 전역적으로 공유합니다.
-- **데이터 모델**: `zone_api.py`는 Firestore의 데이터 구조(map의 배열)와 Python의 Pydantic 모델 간의 데이터 변환을 처리하여, 일관된 데이터 형식을 유지합니다.
+*   **자세 탐지 로직 고도화 완료**:
+    *   단순 BBox 비율 기반 로직에서 시작하여, **`모델 AND 조건`**, **`모델 AND (A OR B)`**, 최종적으로 **`우선순위 기반 분석`** 로직으로 발전시켰습니다.
+    *   이 과정을 통해 `fall_det_1.pt` 모델 자체의 성능보다는, 여러 근거를 복합적으로 해석하고 예외 케이스를 처리하는 **분석 로직의 정교함**이 오탐지 방지에 더 중요하다는 것을 확인했습니다.
+*   **컨베이어 작동 상태 센서 데이터 연동**: `Logic Layer`의 `ModeManager`가 정확히 동작하려면, 실제 컨베이어의 작동 상태를 나타내는 센서 데이터(`conveyor_operating`)를 `InputAdapter`를 통해 수신하고 `LogicFacade`에서 올바르게 파싱하는 작업이 필요합니다. (현재는 로직상 가정)
+*   **테스트 케이스 확장**: 현재의 테스트 이미지 외에, 다양한 각도와 조명, 여러 사람이 겹치는 상황 등 더 복잡한 시나리오에 대한 테스트 케이스를 확보하여 시스템의 강건성을 검증할 필요가 있습니다.

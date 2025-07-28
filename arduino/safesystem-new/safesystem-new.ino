@@ -76,6 +76,10 @@ void motor() {
   }
 }
 
+
+/*
+ * @brief 모터 제어 시 발생하는 고주파 소음을 제거합니다.
+ */
 void initFastPWM31k() {
   TCCR1A = _BV(COM1A1) | _BV(WGM10);
   TCCR1B = _BV(WGM12)  | _BV(CS10);
