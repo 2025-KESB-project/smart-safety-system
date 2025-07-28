@@ -30,11 +30,24 @@ def get_latest_frame():
     """다른 모듈에서 처리된 최신 프레임을 가져오기 위한 함수"""
     return latest_frame
 
-def toggle_conveyor_mode():
-    """컨베이어 작동 상태를 토글하는 함수"""
+def start_conveyor():
+    """컨베이어를 작동시킵니다."""
     global conveyor_is_on
-    conveyor_is_on = not conveyor_is_on
-    logger.info(f"컨베이어 모드 변경 -> {'작동 중' if conveyor_is_on else '작동 멈춤'}")
+    if not conveyor_is_on:
+        conveyor_is_on = True
+        logger.info("컨베이어 모드 변경 -> 작동 시작")
+    return conveyor_is_on
+
+def stop_conveyor():
+    """컨베이어를 정지시킵니다."""
+    global conveyor_is_on
+    if conveyor_is_on:
+        conveyor_is_on = False
+        logger.info("컨베이어 모드 변경 -> 작동 멈춤")
+    return conveyor_is_on
+
+def get_conveyor_status():
+    """현재 컨베이어 작동 상태를 반환합니다."""
     return conveyor_is_on
 
 # --------------------------------------------------------------------------
@@ -97,11 +110,12 @@ def run_safety_system(config: dict, service_facade: ServiceFacade, detector: Det
                 for action in actions:
                     # DB 로깅
                     if action.get("type", "").startswith("LOG_"):
-                        service_facade.db_service.log_event(
-                            event_type=action["type"],
-                            risk_level=risk_analysis.get("risk_level", "unknown"),
-                            details=action.get("details", {})
-                        )
+                        event_to_log = {
+                            "event_type": action["type"],
+                            "risk_level": risk_analysis.get("risk_level", "unknown"),
+                            "details": action.get("details", {})
+                        }
+                        service_facade.db_service.log_event(event_to_log)
                     # UI 실시간 알림
                     if action.get("type") == "NOTIFY_UI":
                         coro = service_facade.alert_service.connection_manager.broadcast(action.get("details", {}))

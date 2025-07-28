@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 from loguru import logger
 import time
 
-from server.background_worker import get_latest_frame, toggle_conveyor_mode
+from server.background_worker import get_latest_frame
 
 router = APIRouter()
 
@@ -68,11 +68,5 @@ def video_feed():
     """
     return StreamingResponse(generate_frames(), media_type="multipart/x-mixed-replace; boundary=frame")
 
-@router.post("/toggle_mode", summary="컨베이어 작동 모드 변경")
-def toggle_mode():
-    """
-    컨베이어의 작동/정지 모드를 토글합니다.
-    """
-    is_on = toggle_conveyor_mode()
-    return {"status": "success", "conveyor_operating": is_on}
+
 
