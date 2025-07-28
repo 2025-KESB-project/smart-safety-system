@@ -21,7 +21,7 @@ INPUT_CONFIG = {
 DETECTOR_CONFIG = {
     'person_detector': {'model_path': 'yolov8n.pt'},
     'pose_detector': {'model_path': 'yolov8n-pose.pt'},
-    'danger_zone_mapper': {'zone_config_path': 'danger_zones.json'}
+    'danger_zone_mapper': {'zone_config_path': ':detect/danger_zones.json'}
 }
 
 WINDOW_NAME = "Input -> Detect Layer Test"
