@@ -1,6 +1,6 @@
 # Smart Safety System for Conveyor Worksite
 
-##  프로젝트 목표
+## 🎯 프로젝트 목표
 
 작업 현장에서 발생할 수 있는 ‘끼임 사고’를 방지하기 위한 스마트 안전 시스템 구축. 특히 **비정형 작업 중**에는 전원을 물리적으로 차단하여 **사람이 있는 상황에서 컨베이어벨트를 작동시키지 않도록** 하는 것이 핵심 목표.
 
@@ -16,126 +16,128 @@
 
 ---
 
-##  시스템 구조 (Layer 구성)
-* 각 계층은 명확한 책임 분리 원칙(SRP)을 따르며, Facade 패턴을 통해 상호작용합니다.
+## 🧱 시스템 구조 (Layer 구성)
 
 ### 1. Input Layer
 - CCTV, 웹캠 → OpenCV로 실시간 프레임 수신 및 전처리
-- 모듈: `input_adapter/`
+- 센서 입력 (초음파, IR 등)
+- 모듈: `stream.py`, `preprocess.py`, `sensor.py`, `adapter.py`
 
 ### 2. Detection Layer
-- `person_detector`, `pose_detector`, `danger_zone_mapper`를 통해 영상에서 위험 요소를 탐지합니다.
-- 모듈: `detect/`
+- `person_detector`: 사람 탐지 (YOLOv8)
+- `pose_detector`: OpenPose 기반 자세 이상 판단
+- `hand_gesture_detector`: 위험 손 모양 감지
+- `danger_zone_mapper`: 지정 위험 구역 내 객체 감지
+- 결과는 `detector.py`를 통해 Logic Layer에 전달
 
 ### 3. Logic Layer
-- `risk_evaluator`, `mode_manager`, `rule_engine`을 통해 시스템의 상태와 위험도를 판단하고, 최종 행동을 결정합니다.
-- 모듈: `logic/`
+- `risk_evaluator`: 위험 점수 계산
+- `mode_manager`: 작업 모드 판단 (정형/비정형)
+- `rule_engine`: 위험 판단 (Safe / Warn / Stop)
+- 제어 명령 및 알림 분기 처리
 
 ### 4. Control Layer
-- `alert_controller`, `power_controller` 등 물리적 장치를 제어합니다. (현재는 Mock 모드)
-- 모듈: `control/`
+- `alert_controller`: 경광등, 부저 제어
+- `power_controller`: 전원 릴레이 제어
+- `speed_controller`: 속도 조절
+- `warning_device`: 기타 장치 제어
 
-### 5. Interface Layer (FastAPI)
-- **RESTful API**: 외부 시스템(UI, 관리 도구)과의 통신을 담당합니다. Pydantic 모델을 통해 모든 요청/응답 데이터의 구조를 명확히 정의합니다.
-- **WebSocket API**: 실시간 로그 및 긴급 경보를 UI에 푸시(Push)합니다.
-- 모듈: `server/`
+### 5. Interface Layer
+- FastAPI 서버 + JavaScript UI
+- 관리자 대시보드 제공
 
-### 6. DB Layer (Firestore)
-- **이벤트 로그**: 모든 시스템 이벤트를 `event_logs` 컬렉션에 저장합니다.
-- **위험 구역 설정**: 다각형 위험 구역 정보를 `danger_zones` 컬렉션에 저장합니다.
-
----
-
-## ⚠️ 주요 에러 및 해결된 이슈
-
-- **(해결) 서버 시작 시 `TypeError` 발생 (2025-07-31)**:
-    - **문제점**: 서버 시작 시 `TypeError: PowerController.__init__() missing 1 required positional argument: 'communicator'` 에러가 발생하며 애플리케이션이 실행되지 않음.
-    - **원인 분석**: `control` 계층의 리팩토링으로 `PowerController`는 `SerialCommunicator` 객체를 필수로 요구하게 되었으나, `server/app.py`에서 `ControlFacade`를 생성할 때 이 의존성을 제대로 주입해주지 않음. `ControlFacade` 역시 하위 컨트롤러들에게 `communicator`를 전달해주는 로직이 리베이스 과정에서 유실됨.
-    - **해결**:
-        1.  **`control/control_facade.py`**: `__init__` 메소드가 `serial_port`와 `baud_rate`를 인자로 받도록 수정. 내부에서 `SerialCommunicator` 객체를 생성하고, 이를 `PowerController`와 `SpeedController`에 명시적으로 주입하도록 코드를 복원.
-        2.  **`config/config.py`**: 하드웨어 설정을 중앙에서 관리하기 위해 `ARDUINO_PORT`와 `ARDUINO_BAUDRATE` 변수 추가.
-        3.  **`server/app.py`**: `lifespan`에서 `ControlFacade`를 생성할 때, `config.py`에서 정의된 포트와 보드레이트 정보를 읽어와 인자로 전달하도록 수정. 이를 통해 서버 시작 시 제어 계층의 의존성이 올바르게 해결됨.
-
-- **(해결) 전원 ON/OFF 로직 및 시스템 활성화 상태 관리 개선 (2025-07-30)**:
-    - **문제점**: 서버 시작 시 컨베이어가 OFF 상태로 시작해야 하지만, `BackgroundWorker`가 전역 함수와 변수로 구성되어 있어 초기화 및 활성화 상태 관리가 모호했음. 서버가 켜져 있는 내내 불필요하게 전원을 끄려는 시도가 반복되었음.
-    - **해결**: `background_worker.py`에 `system_is_active` 전역 변수를 도입하고, `start_system()`, `stop_system()` 함수를 추가하여 시스템의 활성화 상태를 명확히 제어하도록 리팩토링 중. `run_safety_system` 메인 루프는 `system_is_active`가 `False`일 경우 대기하도록 변경하여 불필요한 자원 소모를 방지하고, `POST` 요청을 통해서만 시스템이 본격적으로 동작하도록 함.
-
-- **(해결) 데이터 모델 불일치 문제 해결 (2025-07-29)**:
-    - **문제점**: 위험 구역 좌표 데이터가 백엔드에서는 `{'0': x, '1': y}` 형태로, 프론트엔드에서는 `{'x': x, 'y': y}` 형태로 사용되어 불필요한 변환 로직과 잠재적 오류 가능성이 존재했음.
-    - **해결**: 백엔드의 API와 서비스 로직을 전면 리팩토링하여, Pydantic 모델을 통해 데이터 형식을 `{'x': x, 'y': y}`로 통일함. 이를 통해 코드의 명확성과 데이터 무결성을 확보하고 프론트엔드와의 연동을 단순화함. (이후 기존 DB 데이터 삭제를 통해 완전한 해결)
-
-- **(해결) API 구조 및 실시간 통신 시스템 전면 개선 (2025-07-28)**:
-    - **문제점**: API 구조가 직관적이지 않고, 5초 폴링 방식의 비효율적인 로그 조회 시스템을 사용하고 있었음.
-    - **해결**: RESTful 원칙에 따라 API 구조를 리팩토링하고, WebSocket 기반의 실시간 통신 아키텍처를 도입하여 시스템 전체의 반응성과 효율성을 극대화함. (상세 내용은 하단 Gemini 이해 섹션 참고)
+### 6. DB Layer
+- 감지/판단/경고 기록 저장
+- MySQL 또는 Firebase 사용 예정
 
 ---
 
-##  폴더 구조 (2025.07-28 기준)
+## ⚠️ 주요 에러 및 이슈
 
-'''
+- YOLOv8 예측 결과 관련 오류 (`stream=True` → generator 반환 이슈)
+- **자세 탐지 오탐지 문제**: '팔 벌리고 쪼그려 앉은 자세'를 '넘어짐'으로 오탐지하는 이슈 발생.
+  - **원인**: BBox 비율 조건과 넘어짐 모델의 오인이 결합되어 발생.
+  - **해결**: '끼임/웅크림'을 우선 판단하고, 해당 시 넘어짐 판단을 생략하는 방식으로 로직 고도화.
+- 테스트 시 모듈 import 에러 발생
+- **Git Stash 충돌**: `detect/pose_detector.py` 파일에서 Stash 적용 중 충돌 발생. 최종 합의된 로직을 기준으로 수동 병합하여 해결.
+
+---
+
+## 📁 폴더 구조 (2025.07 기준)
+
+```
 .
-├── ...
+├── input_adapter/
+│   ├── stream.py
+│   ├── preprocess.py
+│   ├── sensor.py
+│   └── adapter.py
+├── detect/
+│   ├── person_detector.py
+│   ├── pose_detector.py
+│   ├── hand_gesture_detector.py
+│   └── danger_zone_mapper.py
+├── logic/
+│   ├── mode_manager.py
+│   ├── risk_evaluator.py
+│   └── rule_engine.py
+├── control/
+│   ├── alert_controller.py
+│   ├── power_controller.py
+│   ├── speed_controller.py
+│   └── warning_device.py
 ├── server/
-│   ├── app.py              # FastAPI 앱 초기화 및 중앙 관리
-│   ├── dependencies.py     # 의존성 주입
-│   ├── models/             # Pydantic 모델 (데이터 설계도)
-│   │   ├── control.py
-│   │   ├── status.py
-│   │   ├── websockets.py
-│   │   └── zone.py
-│   ├── routes/             # API 엔드포인트 정의
-│   │   ├── alert_ws.py     # (구 websockets.py) 긴급 알림 WebSocket
-│   │   ├── control_api.py  # 시스템 제어 API
-│   │   ├── log_api.py      # (구 events.py) 과거 로그 조회 API
-│   │   ├── log_ws.py       # (구 log_stream.py) 실시간 로그 WebSocket
-│   │   ├── streaming.py
-│   │   └── zone_api.py
-│   └── services/           # 비즈니스 로직
-│       ├── alert_service.py
-│       ├── db_service.py   # DB 로직 + 실시간 로그 방송 기능
-│       └── zone_service.py
-└── ...
-'''
+│   ├── app.py
+│   ├── config.py
+│   ├── models/
+│   ├── routes/
+│   └── services/
+├── test/
+│   └── test_input_adapter.py
+├── verify_fall_model.py
+```
 
 ---
 
-##  향후 계획
+## 🧭 향후 계획
 
-- **React 프론트엔드 연동**: 개선된 API(`log_api.py`, `zone_api.py`)와 WebSocket(`log_ws.py`, `alert_ws.py`)을 프론트엔드에 완전히 통합.
-- **(완료) 실시간 로그 업데이트**: 5초 폴링 방식을 WebSocket 기반 실시간 스트리밍으로 전환 완료.
-- **Failsafe 로직 강화**: UI 승인 없이는 절대 전원 불가 구조 고려.
-- **Rule Engine 방식 개선**: Risk Score vs Boolean 판단.
+- failsafe 로직 강화: UI 승인 없이는 절대 전원 불가 구조 고려
+- Rule Engine 방식 개선: Risk Score vs Boolean 판단
+- Unity 기반 3D 시각화 시도
+- Flask → FastAPI 전환 여부 검토
+- Firebase vs MySQL 선택 마무리
 
----
+## 🧠 현재까지의 프로젝트 이해 (Gemini)
 
-##  현재까지의 프로젝트 이해 (Gemini) - 2025-08-01 업데이트
+이 문서는 Gemini가 프로젝트의 현재 상태와 핵심 로직에 대해 이해하고 있는 내용을 요약합니다. 다음 세션에서 원활한 협업을 위해 지속적으로 업데이트됩니다.
 
-이 문서는 Gemini가 프로젝트의 최신 상태와 핵심 로직에 대해 이해하고 있는 내용을 요약합니다.
+### 1. Detection Layer의 상세 역할 및 흐름
 
-### 1. 제어 계층 (`Control Layer`) 리팩토링 및 하드웨어 연동
+*   **`PersonDetector`**: `yolov8n.pt`를 사용하여 프레임 내의 모든 '사람' 객체를 탐지하고 바운딩 박스를 반환합니다.
+*   **`PoseDetector`**: **2개의 모델**을 사용하여 자세를 복합적으로 분석합니다.
+    1.  **`yolov8n-pose.pt`**: 사람의 주요 관절(keypoints)과 바운딩 박스를 탐지합니다.
+    2.  **`fall_det_1.pt`**: '넘어짐' 상태에 특화된 모델로, 'Fall-Detected' 클래스를 탐지합니다.
+*   **`_analyze_pose` (핵심 분석 로직)**: `PoseDetector` 내의 이 메서드는 오탐지를 최소화하고 정확도를 높이기 위해 **우선순위 기반 분석**을 수행합니다.
+    1.  **(1순위) 끼임/웅크림 분석**:
+        *   주요 관절(어깨, 엉덩이)의 위치를 기반으로 몸통의 수직 길이를 계산합니다.
+        *   이 길이가 전체 바운딩 박스 높이의 **30% 미만**이면 **'끼임/웅크림(Crouching)'**으로 즉시 판정하고 분석을 종료합니다.
+        *   **목적**: '팔 벌리고 쪼그려 앉은 자세'가 '넘어짐'으로 오탐지되는 것을 원천 차단합니다.
+    2.  **(2순위) 넘어짐 분석**:
+        *   '끼임/웅크림'이 아닐 경우에만 넘어짐 분석을 수행합니다.
+        *   **`is_model_falling` AND (`is_torso_horizontal` OR `is_ratio_falling`)** 이라는 유연한 복합 조건을 사용합니다.
+            *   **(필수)** `fall_det_1.pt`가 해당 인물을 'Fall-Detected'로 탐지해야 합니다.
+            *   **_AND_**
+            *   **(선택)** 몸통의 수직 길이가 전체 높이의 **25% 미만**으로 매우 짧거나(수평 상태), **_OR_** 바운딩 박스의 너비가 높이보다 **1.4배 이상**이어야 합니다.
+        *   **목적**: 실제 넘어진 다양한 자세(앞, 뒤, 옆)는 놓치지 않으면서, 서 있는 자세와의 오탐지를 최소화합니다.
 
-- **`SerialCommunicator` 도입**: `SpeedController`와 `PowerController`가 시리얼 포트를 공유하며 발생할 수 있는 충돌을 원천적으로 방지하기 위해, 시리얼 통신을 전담하는 `SerialCommunicator` 클래스를 도입. 이제 모든 하드웨어 제어 명령은 이 클래스를 통해 아두이노로 전송됨.
-- **`PowerController` 역할 재정의**: 기존의 논리적 상태만 관리하던 것에서, `SerialCommunicator`를 통해 릴레이 모듈에 직접 ON/OFF(`p1`/`p0`) 명령을 내리는 역할로 변경. 실제적인 전원 차단 기능을 담당하게 됨.
-- **의존성 주입(DI) 구조 확립**: `server/app.py`가 시작될 때, `config.py`에서 포트 정보를 읽어 `ControlFacade`를 초기화. `ControlFacade`는 `SerialCommunicator`의 단일 인스턴스를 생성하여, 이를 `PowerController`와 `SpeedController`에 주입(Injection)하는 명확한 의존성 흐름을 확립함. 이를 통해 서버 시작 시 발생하던 `TypeError`를 해결.
+### 2. Logic Layer의 역할 (기존과 동일)
 
-### 2. 통합 테스트 (`test_struct.py`) 강화
+`Detection Layer`에서 정교하게 분석된 결과(`is_falling`, `is_crouching` 등)를 입력받아, 현재 작업 모드(`operating`/`stopped`)에 따라 최종 제어 명령(`STOP_POWER`, `SLOW_DOWN` 등)을 결정합니다.
 
-- **`CRITICAL` 위험 시나리오 검증**: 기존에 누락되었던 '넘어짐' 상황에 대한 테스트 로직을 추가. `STOP_POWER` 액션이 감지되면 테스트가 성공적으로 종료되도록 구현하여, 시스템의 가장 중요한 안전 기능(전원 차단)을 검증할 수 있게 됨.
+### 3. 주요 이슈 및 향후 계획 (Gemini 관점)
 
-### 3. 시스템 아키텍처 및 데이터 흐름 이해
-
-- **5-Step Pipeline**: (Input) → (Detection) → (Logic) → (Control) → (Execution) 으로 이어지는 명확한 5단계 파이프라인 구조를 이해하고 있음.
-- **데이터 객체**: 각 계층이 `DetectionResult`, `List[Action]`, `Serial Command` 등 명확하게 정의된 데이터 객체를 통해 통신하는 핵심적인 아키텍처를 파악함.
-- **'웅크림' 탐지 로직**: `PoseDetector`가 몸통의 세로 길이와 전체 키의 비율을 계산하여 '웅크림/끼임' 상태를 `high` 위험 등급으로 판단하는 구체적인 로직을 이해함. 이 정보는 `DetectionResult`에 직접 포함되지 않고, `people_in_zones` 필드에 위험 등급으로서 간접적으로 반영됨을 인지.
-
-### 4. 주요 디버깅 및 해결 과정 (2025-08-01)
-
-- **`AttributeError: 'SpeedController' object has no attribute 'get_status'`**: `ControlFacade`가 `SpeedController`의 상태를 조회할 때 발생. `SpeedController`의 `get_system_status` 메소드 이름을 `get_status`로 변경하여 해결.
-- **모터 구동 문제 (초기 속도)**: `SpeedController`의 `current_speed_percent`가 기본값 100으로 설정되어 있어, `resume_full_speed` 호출 시 명령이 전송되지 않던 문제. `SpeedController`의 초기 `current_speed_percent`를 0으로 변경하여 해결.
-- **`AttributeError: 'AlertController' object has no attribute 'get_status'`**: `ControlFacade`가 `AlertController`의 상태를 조회할 때 발생. `AlertController`에 `get_status` 메소드를 추가하여 해결.
-- **`TypeError: PowerController.__init__() missing 1 required positional argument: 'communicator'`**: `ControlFacade`가 `PowerController`를 초기화할 때 `communicator`를 전달하지 않아 발생. `ControlFacade`의 `__init__` 메소드를 수정하여 `SerialCommunicator`를 생성하고 하위 컨트롤러에 주입하도록 해결.
-- **`AttributeError: 'PowerController' object has no attribute 'turn_off'`**: `ControlFacade`가 `PowerController`의 `turn_off` 메소드를 호출했으나, 실제 메소드 이름은 `power_off`여서 발생. `ControlFacade`의 `execute_actions` 메소드에서 `turn_off`를 `power_off`로 수정하여 해결.
-- **아두이노 응답 로그 미출력**: `SerialCommunicator`가 아두이노의 응답을 읽지 않던 문제. `send_command` 메소드에 `readline()`을 통한 응답 수신 및 로깅 로직 추가하여 해결.
-- **`RuleEngine`의 반복적인 `POWER_ON`/`STOP_POWER` 명령 생성**: `LogicFacade`가 `RuleEngine`에 `current_conveyor_status`를 전달하고, `RuleEngine`은 컨베이어가 작동 중일 때만 `STOP_POWER` 명령을 생성하도록 로직을 수정하여 해결. (이전에는 `POWER_ON` 명령 반복 생성 문제도 동일한 방식으로 해결됨)
-- **`ControlFacade`의 `POWER_OFF` 액션 무시**: `background_worker`가 `POWER_OFF` 액션을 보냈을 때 `ControlFacade`가 이를 알 수 없는 액션으로 처리하던 문제. `ControlFacade`의 `execute_actions` 메소드 조건문에 `action_type == "POWER_OFF"`를 추가하여 해결.
-- **`stop_system` API 하드웨어 연동**: `control_api.py`의 `stop_system` 메소드가 `ControlFacade`를 통해 실제 하드웨어 전원을 차단하도록 수정.
+*   **자세 탐지 로직 고도화 완료**:
+    *   단순 BBox 비율 기반 로직에서 시작하여, **`모델 AND 조건`**, **`모델 AND (A OR B)`**, 최종적으로 **`우선순위 기반 분석`** 로직으로 발전시켰습니다.
+    *   이 과정을 통해 `fall_det_1.pt` 모델 자체의 성능보다는, 여러 근거를 복합적으로 해석하고 예외 케이스를 처리하는 **분석 로직의 정교함**이 오탐지 방지에 더 중요하다는 것을 확인했습니다.
+*   **컨베이어 작동 상태 센서 데이터 연동**: `Logic Layer`의 `ModeManager`가 정확히 동작하려면, 실제 컨베이어의 작동 상태를 나타내는 센서 데이터(`conveyor_operating`)를 `InputAdapter`를 통해 수신하고 `LogicFacade`에서 올바르게 파싱하는 작업이 필요합니다. (현재는 로직상 가정)
+*   **테스트 케이스 확장**: 현재의 테스트 이미지 외에, 다양한 각도와 조명, 여러 사람이 겹치는 상황 등 더 복잡한 시나리오에 대한 테스트 케이스를 확보하여 시스템의 강건성을 검증할 필요가 있습니다.
