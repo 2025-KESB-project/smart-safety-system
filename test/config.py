@@ -30,7 +30,7 @@ class Config:
     DANGER_ZONE_CONFIG_PATH = os.getenv("DANGER_ZONE_CONFIG_PATH", "danger_zones.json")
 
     # 제어 모듈 설정
-    MOCK_MODE_CONTROL = os.getenv("MOCK_MODE_CONTROL", "True").lower() == "true"
+    MOCK_MODE_CONTROL = os.getenv("MOCK_MODE_CONTROL", "False").lower() == "true"
 
     # Firebase 설정
     FIREBASE_COLLECTION_NAME = os.getenv("FIREBASE_COLLECTION_NAME", "event_logs")

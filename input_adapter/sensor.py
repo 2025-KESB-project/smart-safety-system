@@ -7,9 +7,9 @@ from typing import Optional, Dict, Any, List
 
 class SensorReader:
     """다양한 센서 데이터를 읽는 클래스"""
-    
-    def __init__(self, sensor_pin: Optional[int] = None, 
-                 sensor_types = None,
+
+    def __init__(self, sensor_pin: Optional[int] = None,
+                 sensor_types=None,
                  mock_mode: bool = True):
         """
         센서 리더를 초기화합니다.
@@ -19,23 +19,25 @@ class SensorReader:
         """
         self.sensor_pin = sensor_pin
         self.mock_mode = mock_mode
-        self.sensor_types = sensor_types or ["touch", "distance", "temperature", "humidity"]
+        # 'conveyor_operating' 센서 타입을 기본값에 추가
+        self.sensor_types = sensor_types or ["touch", "distance", "temperature", "humidity", "conveyor_operating"]
         self.is_running = False
         self.data_buffer = []
         self.max_buffer_size = 100
-        
+
         # 센서별 임계값 설정
         self.thresholds = {
             "touch": 0.5,
             "distance": 50.0,  # cm
             "temperature": 35.0,  # Celsius
-            "humidity": 80.0  # %
+            "humidity": 80.0,  # %
+            "conveyor_operating": 0.5  # 1 for operating, 0 for stopped
         }
-        
+
         # GPIO 초기화 (실제 하드웨어 연결 시)
         if not mock_mode and sensor_pin is not None:
             self._initialize_gpio()
-    
+
     def _initialize_gpio(self):
         """GPIO를 초기화합니다."""
         try:
@@ -62,14 +64,14 @@ class SensorReader:
             return self._read_mock_data()
         else:
             return self._read_real_data()
-    
+
     def _read_mock_data(self) -> Dict[str, Any]:
         """모의 센서 데이터를 생성합니다."""
         data = {
             "timestamp": time.time(),
             "sensors": {}
         }
-        
+
         for sensor_type in self.sensor_types:
             if sensor_type == "touch":
                 value = random.uniform(0, 1)
@@ -83,32 +85,36 @@ class SensorReader:
             elif sensor_type == "humidity":
                 value = random.uniform(30, 90)
                 is_alert = value > self.thresholds["humidity"]
+            elif sensor_type == "conveyor_operating":
+                # 테스트를 위해 컨베이어는 항상 작동 중(1)이라고 가정
+                value = 1
+                is_alert = False  # 이 센서는 상태 정보 제공이 목적
             else:
                 value = random.uniform(0, 100)
                 is_alert = False
-            
+
             data["sensors"][sensor_type] = {
                 "value": round(value, 2),
                 "unit": self._get_unit(sensor_type),
                 "is_alert": False,  # 테스트 중에는 항상 False로 설정
                 "threshold": self.thresholds.get(sensor_type, 0)
             }
-        
+
         # 데이터 버퍼에 저장
         self._add_to_buffer(data)
-        
+
         return data
-    
+
     def _read_real_data(self) -> Dict[str, Any]:
         """실제 센서 데이터를 읽습니다."""
         data = {
             "timestamp": time.time(),
             "sensors": {}
         }
-        
+
         try:
             import RPi.GPIO as GPIO
-            
+
             # 터치 센서 읽기
             if "touch" in self.sensor_types:
                 if self.sensor_pin is None:
@@ -120,17 +126,17 @@ class SensorReader:
                     "is_alert": touch_value > self.thresholds["touch"],
                     "threshold": self.thresholds["touch"]
                 }
-            
+
             # 다른 센서들도 여기에 추가 가능
             # 예: I2C, SPI 센서 등
-            
+
         except Exception as e:
             print(f"실제 센서 읽기 실패: {e}")
             return self._read_mock_data()
-        
+
         self._add_to_buffer(data)
         return data
-    
+
     def _get_unit(self, sensor_type: str) -> str:
         """센서 타입에 따른 단위를 반환합니다."""
         units = {
@@ -139,7 +145,8 @@ class SensorReader:
             "temperature": "°C",
             "humidity": "%",
             "pressure": "hPa",
-            "light": "lux"
+            "light": "lux",
+            "conveyor_operating": "binary"
         }
         return units.get(sensor_type, "unknown")
     

@@ -15,7 +15,7 @@ class SpeedState(Enum):
 class SpeedController:
     """속도 제어 시스템 (아두이노 연동)"""
 
-    def __init__(self, mock_mode: bool = True, port: Optional[str] = None, baudrate: int = 9600):
+    def __init__(self, mock_mode: bool = True, port: Optional[str] = "COM9", baudrate: int = 9600):
         """
         속도 제어기를 초기화합니다.
         :param mock_mode: 모의 모드 여부. False일 경우 실제 아두이노와 통신합니다.
@@ -38,10 +38,9 @@ class SpeedController:
         """시리얼 포트를 찾아 아두이노와 연결을 초기화합니다."""
         try:
             if port is None:
-                port = self._find_arduino_port()
-                if port is None:
-                    logger.error("아두이노 포트를 찾을 수 없습니다. 연결을 확인해주세요.")
-                    return
+                # 자동 탐지 대신 기본 포트를 사용하거나, 명시적 설정을 요구할 수 있습니다.
+                logger.error("아두이노 포트가 지정되지 않았습니다. config 또는 파라미터로 포트를 명시해주세요.")
+                return
 
             logger.info(f"아두이노 포트({port})에 {baudrate} 보드레이트로 연결을 시도합니다...")
             self.arduino = serial.Serial(port, baudrate, timeout=1)
