@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import Depends, Request
 from loguru import logger
 from google.cloud.firestore_v1.client import Client
@@ -26,11 +27,16 @@ def get_zone_service(db: Client = Depends(get_db_client)) -> ZoneService:
     """
     return ZoneService(db=db)
 
-def get_db_service(db: Client = Depends(get_db_client)) -> DBService:
+def get_db_service(request: Request, db: Client = Depends(get_db_client)) -> DBService:
     """
-    Creates and returns an instance of DBService, injecting the DB client.
+    Creates and returns an instance of DBService, injecting the DB client and the event loop from the app state.
     """
-    return DBService(db=db)
+    if not hasattr(request.app.state, 'loop') or not request.app.state.loop:
+        logger.error("Event loop is not available in app.state.")
+        raise RuntimeError("Event loop not initialized. Check server startup logs.")
+    
+    loop = request.app.state.loop
+    return DBService(db=db, loop=loop)
 
 def get_service_facade(request: Request) -> ServiceFacade:
     """

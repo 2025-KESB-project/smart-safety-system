@@ -17,88 +17,78 @@
 ---
 
 ## 🧱 시스템 구조 (Layer 구성)
+* 각 계층은 명확한 책임 분리 원칙(SRP)을 따르며, Facade 패턴을 통해 상호작용합니다.
 
 ### 1. Input Layer
 - CCTV, 웹캠 → OpenCV로 실시간 프레임 수신 및 전처리
-- 센서 입력 (초음파, IR 등)
-- 모듈: `stream.py`, `preprocess.py`, `sensor.py`, `adapter.py`
+- 모듈: `input_adapter/`
 
 ### 2. Detection Layer
-- `person_detector`: 사람 탐지 (YOLOv8)
-- `pose_detector`: OpenPose 기반 자세 이상 판단
-- `hand_gesture_detector`: 위험 손 모양 감지
-- `danger_zone_mapper`: 지정 위험 구역 내 객체 감지
-- 결과는 `detector.py`를 통해 Logic Layer에 전달
+- `person_detector`, `pose_detector`, `danger_zone_mapper`를 통해 영상에서 위험 요소를 탐지합니다.
+- 모듈: `detect/`
 
 ### 3. Logic Layer
-- `risk_evaluator`: 위험 점수 계산
-- `mode_manager`: 작업 모드 판단 (정형/비정형)
-- `rule_engine`: 위험 판단 (Safe / Warn / Stop)
-- 제어 명령 및 알림 분기 처리
+- `risk_evaluator`, `mode_manager`, `rule_engine`을 통해 시스템의 상태와 위험도를 판단하고, 최종 행동을 결정합니다.
+- 모듈: `logic/`
 
 ### 4. Control Layer
-- `alert_controller`: 경광등, 부저 제어
-- `power_controller`: 전원 릴레이 제어
-- `speed_controller`: 속도 조절
-- `warning_device`: 기타 장치 제어
+- `alert_controller`, `power_controller` 등 물리적 장치를 제어합니다. (현재는 Mock 모드)
+- 모듈: `control/`
 
-### 5. Interface Layer
-- FastAPI 서버 + JavaScript UI
-- 관리자 대시보드 제공
+### 5. Interface Layer (FastAPI)
+- **RESTful API**: 외부 시스템(UI, 관리 도구)과의 통신을 담당합니다. Pydantic 모델을 통해 모든 요청/응답 데이터의 구조를 명확히 정의합니다.
+- **WebSocket API**: 실시간 로그 및 긴급 경보를 UI에 푸시(Push)합니다.
+- 모듈: `server/`
 
-### 6. DB Layer
-- **이벤트 로그**: 감지/판단/경고 기록 저장 (Firestore `event_logs` 컬렉션)
-- **위험 구역 설정**: 다각형 위험 구역 정보 저장 (Firestore `danger_zones` 컬렉션)
+### 6. DB Layer (Firestore)
+- **이벤트 로그**: 모든 시스템 이벤트를 `event_logs` 컬렉션에 저장합니다.
+- **위험 구역 설정**: 다각형 위험 구역 정보를 `danger_zones` 컬렉션에 저장합니다.
 
 ---
 
 ## ⚠️ 주요 에러 및 해결된 이슈
 
-- **(해결)** **위험 구역 데이터 관리 방식 개선**: 
-    - **문제점**: 기존 `danger_zones.json` 파일은 확장성, 실시간 업데이트, 중앙 관리에 한계가 있었음.
-    - **해결**: 위험 구역 정보를 **Firestore DB**에 저장하도록 시스템을 전면 개편. 이를 위해 `server` 모듈에 `ZoneService` (DB 로직), `zone_api` (API 엔드포인트), `dependencies` (의존성 주입)를 추가함. `detect/danger_zone_mapper`는 이제 `ZoneService`를 통해 DB에서 직접 구역 정보를 로드함.
+- **(해결) API 구조 및 실시간 통신 시스템 전면 개선 (2025-07-28)**:
+    - **문제점**: API 구조가 직관적이지 않고, 5초 폴링 방식의 비효율적인 로그 조회 시스템을 사용하고 있었음.
+    - **해결**: RESTful 원칙에 따라 API 구조를 리팩토링하고, WebSocket 기반의 실시간 통신 아키텍처를 도입하여 시스템 전체의 반응성과 효율성을 극대화함. (상세 내용은 하단 Gemini 이해 섹션 참고)
 
-- **(해결)** **Firestore 데이터 타입 불일치**: 
-    - **문제점**: Firestore는 2차원 배열(`[[x,y], ...]`)을 직접 지원하지 않아, 'map의 배열'(`[{0:x, 1:y}, ...]`) 형태로 저장해야 했음. 이로 인해 Python에서 데이터를 읽어올 때 `TypeError` 발생.
-    - **해결**: `danger_zone_mapper.py`의 `add_zone` 함수에 데이터 변환 로직을 추가하여, Firestore의 `map` 구조를 Python의 `list` 구조로 명시적으로 변환 후 `np.array()`에 전달함으로써 문제 해결.
+- **(해결) `TypeError` 및 `AttributeError`**:
+    - **문제점**: `db_service.log_event` 호출 시 잘못된 인자 전달, `rule_engine`에서 딕셔너리가 아닌 객체에 `.keys()` 호출.
+    - **해결**: `log_event` 호출 방식을 수정하고, `rule_engine`에 타입 체크 로직을 추가하여 안정성 확보.
 
-- **(해결)** **Firestore 연결 난립 및 중앙화**: 
-    - **문제점**: `DBService`와 `ZoneService`가 각각 `firebase_admin.initialize_app()`을 호출하여 DB 연결이 여러 곳에서 중복 발생하고 있었음.
-    - **해결**: `server/app.py`의 `lifespan` 함수에서 서버 시작 시 **단 한 번만** `firebase_admin.initialize_app()`을 호출하고 `firestore.client()` 객체를 생성하여 `app.state.db`에 저장하도록 변경. 모든 서비스(`DBService`, `ZoneService`)는 이제 `app.state.db`에서 가져온 단일 DB 클라이언트 객체를 주입받아 사용함.
+- **(해결) `EOFError: Ran out of input`**:
+    - **문제점**: `torch.load` 실행 시 모델 파일(`.pt`)을 읽지 못함. Git 작업 중 바이너리 파일이 손상된 것으로 추정.
+    - **해결**: 손상된 `yolov8n-pose.pt` 파일을 삭제하고, 공식 소스에서 새로 다운로드하여 문제 해결.
 
-- **(해결)** **누락된 `get_db_service` 함수 추가**: 
-    - **문제점**: `server/dependencies.py` 리팩토링 과정에서 `get_db_service` 함수가 누락되어 `app.py`에서 `ImportError` 발생.
-    - **해결**: `server/dependencies.py`에 `get_db_service` 함수를 추가하여 `DBService` 인스턴스를 올바르게 주입할 수 있도록 함.
-
-- **(해결)** **잘못된 서버 실행 위치**: 
-    - **문제점**: `uvicorn` 명령어를 프로젝트 루트가 아닌 하위 디렉토리에서 실행하여 `ImportError` 발생.
-    - **해결**: `uvicorn` 명령은 항상 **프로젝트의 최상위 루트 디렉토리**에서 실행해야 함을 명확히 함.
-
-- YOLOv8 예측 결과 관련 오류 (`stream=True` → generator 반환 이슈)
-- class filter 중복 체크 문제
-- `VideoStream.read()` 누락 오류
+- **(해결) 위험 구역 데이터 관리 방식 개선**: Firestore DB로 이전하여 확장성 및 중앙 관리 확보.
+- **(해결) Firestore 연결 중앙화**: `app.py`의 `lifespan`에서 DB 연결을 중앙 관리하도록 수정.
 
 ---
 
-## 📁 폴더 구조 (2025.07 기준)
+## 📁 폴더 구조 (2025.07-28 기준)
 
 ```
 .
 ├── ...
-├── detect/
-│   ├── ...
-│   └── danger_zone_mapper.py
-├── logic/
-│   └── ...
 ├── server/
-│   ├── app.py
-│   ├── dependencies.py
-│   ├── routes/
-│   │   ├── events.py
-│   │   └── zone_api.py  # <--- 추가됨
-│   └── services/
-│       ├── db_service.py
-│       └── zone_service.py # <--- 추가됨
+│   ├── app.py              # FastAPI 앱 초기화 및 중앙 관리
+│   ├── dependencies.py     # 의존성 주입
+│   ├── models/             # Pydantic 모델 (데이터 설계도)
+│   │   ├── control.py
+│   │   ├── status.py
+│   │   ├── websockets.py
+│   │   └── zone.py
+│   ├── routes/             # API 엔드포인트 정의
+│   │   ├── alert_ws.py     # (구 websockets.py) 긴급 알림 WebSocket
+│   │   ├── control_api.py  # 시스템 제어 API
+│   │   ├── log_api.py      # (구 events.py) 과거 로그 조회 API
+│   │   ├── log_ws.py       # (구 log_stream.py) 실시간 로그 WebSocket
+│   │   ├── streaming.py
+│   │   └── zone_api.py
+│   └── services/           # 비즈니스 로직
+│       ├── alert_service.py
+│       ├── db_service.py   # DB 로직 + 실시간 로그 방송 기능
+│       └── zone_service.py
 └── ...
 ```
 
@@ -106,75 +96,44 @@
 
 ## 🧭 향후 계획
 
-- **실시간 위험 구역 업데이트**: 현재 백그라운드 워커가 DB의 위험 구역 변경 사항을 즉시 반영하지 못함. 주기적 업데이트 또는 Firestore `on_snapshot`을 이용한 이벤트 기반 업데이트 로직 구현 필요.
-- **React 프론트엔드 연동**: `zone_api.py`와 연동하여, 관리자가 웹 UI에서 직접 위험 구역을 시각적으로 생성/수정/삭제하는 기능 구현.
-- failsafe 로직 강화: UI 승인 없이는 절대 전원 불가 구조 고려.
-- Rule Engine 방식 개선: Risk Score vs Boolean 판단.
-- Unity 기반 3D 시각화 시도.
+- **React 프론트엔드 연동**: 개선된 API(`log_api.py`, `zone_api.py`)와 WebSocket(`log_ws.py`, `alert_ws.py`)을 프론트엔드에 완전히 통합.
+- **(완료) 실시간 로그 업데이트**: 5초 폴링 방식을 WebSocket 기반 실시간 스트리밍으로 전환 완료.
+- **Failsafe 로직 강화**: UI 승인 없이는 절대 전원 불가 구조 고려.
+- **Rule Engine 방식 개선**: Risk Score vs Boolean 판단.
 
-## 🧠 현재까지의 프로젝트 이해 (Gemini)
+---
 
-이 문서는 Gemini가 프로젝트의 현재 상태와 핵심 로직에 대해 이해하고 있는 내용을 요약합니다. 다음 세션에서 원활한 협업을 위해 지속적으로 업데이트됩니다.
+## 🧠 현재까지의 프로젝트 이해 (Gemini) - 2025-07-28 업데이트
 
-### 1. 위험 구역 관리 시스템 개편 (최신 업데이트)
+이 문서는 Gemini가 프로젝트의 최신 상태와 핵심 로직에 대해 이해하고 있는 내용을 요약합니다.
 
-- **저장소**: 위험 구역 데이터의 영구 저장소가 로컬 `danger_zones.json` 파일에서 **Google Firestore**로 이전되었습니다. 이를 통해 중앙 관리, 실시간 업데이트, 확장성을 확보했습니다.
-- **핵심 모듈**:
-    - **`ZoneService` (`server/services/zone_service.py`)**: Firestore의 `danger_zones` 컬렉션에 대한 CRUD(Create, Read, Update, Delete) 로직을 전담합니다.
-    - **`zone_api` (`server/routes/zone_api.py`)**: 외부(React 프론트엔드 등)에서 위험 구역을 관리할 수 있도록 `GET`, `POST`, `PUT`, `DELETE` API 엔드포인트를 제공합니다.
-    - **`DangerZoneMapper` (`detect/danger_zone_mapper.py`)**: 이제 `ZoneService`를 통해 DB에서 직접 위험 구역 정보를 로드합니다. Firestore의 데이터 형식(`map`의 배열)을 Python에서 사용하는 `list`의 `list`로 변환하는 로직을 포함합니다.
-- **데이터 형식**: Firestore에는 2차원 배열을 직접 저장할 수 없으므로, `points` 필드는 **`map`의 배열** (Array of Maps) 형태로 저장하는 것을 표준으로 정립했습니다. 각 `map`은 `{ '0': x_좌표, '1': y_좌표 }` 구조를 가집니다.
+### 1. API 및 실시간 통신 시스템 전면 개선
 
-### 2. Firestore 연결 중앙화 및 의존성 관리 (최신 업데이트)
+최근 세션을 통해 서버의 API 구조와 통신 방식이 대대적으로 개선되었습니다.
 
-- **중앙 초기화**: `firebase_admin.initialize_app()` 호출은 이제 `server/app.py`의 `lifespan` 함수에서 서버 시작 시 **단 한 번만** 수행됩니다. 생성된 `firestore.client()` 객체는 `app.state.db`에 저장되어 애플리케이션 전반에 걸쳐 공유됩니다.
-- **의존성 주입**: `server/dependencies.py`는 `app.state.db`에서 공유된 DB 클라이언트 객체를 가져와 `ZoneService`와 `DBService` 인스턴스에 주입하는 역할을 합니다. 이로써 각 서비스는 DB 연결 로직에 대해 알 필요 없이 비즈니스 로직에만 집중할 수 있습니다.
-- **서비스 단순화**: `server/services/db_service.py`와 `server/services/zone_service.py`는 더 이상 자체적으로 Firebase를 초기화하거나 인증서 경로를 관리하지 않습니다. 생성자에서 이미 초기화된 `firestore.client()` 객체를 인자로 받습니다.
-- **Facade 주입**: `server/app.py`에서 `ServiceFacade`와 `Detector`를 초기화할 때, 이미 생성된 `DBService` 및 `ZoneService` 인스턴스를 직접 주입합니다. 이는 Facade 계층이 필요한 서비스 인스턴스를 명확히 전달받도록 하여 결합도를 낮춥니다.
+#### 1.1. RESTful API 설계 및 Pydantic 모델 전면 도입
 
-### 3. 핵심 요구사항 재정의 및 이해
+- **역할 기반 분리**: API의 역할과 책임에 따라 파일과 경로를 명확하게 분리했습니다.
+    - `events.py` → `log_api.py` (`/api/logs`): 과거 로그 조회 (HTTP)
+    - `streaming.py`에서 제어 기능 분리 → `control_api.py` (`/api/control`): 컨베이어 제어
+- **멱등성 보장**: `toggle` 방식의 API를 명시적인 `start`, `stop`으로 변경하여, 반복 호출 시에도 동일한 결과를 보장하는 안정적인 API를 구현했습니다.
+- **Pydantic 모델 적용**: 모든 주요 API(`logs`, `zones`, `control`, `status`)의 요청(Request) 및 응답(Response)을 Pydantic 모델로 엄격하게 정의했습니다.
+    - **장점 1 (자동 문서화)**: `/docs`의 API 문서가 매우 상세하고 명확해졌습니다.
+    - **장점 2 (데이터 안정성)**: 잘못된 형식의 데이터가 오고 가는 것을 원천적으로 차단합니다.
 
-*   **작업 모드 정의의 명확화**:
-    *   **`operating` 모드 (정형 작업)**: 컨베이어 벨트가 현재 작동 중인 상태.
-        *   목표: 위험 상황 발생 시 **감속** 또는 **정지**를 통해 사고 예방.
-    *   **`stopped` 모드 (비정형 작업)**: 컨베이어 벨트가 현재 정지 중인 상태.
-        *   목표: 위험 구역 내 사람 감지 또는 특정 센서 알림 시 **전원 투입을 절대적으로 방지 (LOTO 기능)**. 이는 시스템의 최우선 안전 목표입니다.
-*   **센서 데이터의 중요성**: `InputAdapter`를 통해 들어오는 센서 데이터(특히 컨베이어 벨트 작동 상태)는 작업 모드 판단 및 위험 평가에 필수적인 요소입니다.
+#### 1.2. 실시간 통신 아키텍처 구축 (WebSocket 도입)
 
-### 4. Logic Layer의 상세 역할 및 흐름 (재설계 반영)
+기존의 5초 주기 폴링(Polling) 방식을 완전히 폐기하고, WebSocket을 이용한 진정한 실시간 통신 아키텍처를 구축했습니다.
 
-Logic Layer는 `InputAdapter`와 `Detection Layer`로부터 받은 데이터를 기반으로 시스템의 핵심 안전 판단을 수행하며, `Control Layer`로 전달할 최종 명령을 결정합니다.
+- **"초기 로딩(HTTP) + 실시간 업데이트(WebSocket)" 모델**:
+    - **초기 로딩**: UI가 처음 열릴 때 `GET /api/logs`를 호출하여 과거 로그를 가져옵니다.
+    - **실시간 업데이트**: 이후 발생하는 모든 이벤트는 WebSocket을 통해 서버가 즉시 UI로 푸시(Push)합니다.
+- **채널 분리**: 목적에 따라 두 개의 독립된 WebSocket 채널을 운영합니다.
+    - **`/ws/logs` (`log_ws.py`)**: 모든 종류의 시스템 로그를 실시간으로 스트리밍하는 '뉴스 채널'.
+    - **`/ws/alerts` (`alert_ws.py`)**: 긴급 상황만 전송하는 '재난 문자 채널'.
+- **데이터 일관성**: `DBService`가 Firestore에 로그를 저장하는 즉시, 해당 로그를 `/ws/logs` 채널로 방송하도록 구현하여 DB와 UI 간의 데이터 일관성을 보장합니다.
 
-*   **`RiskEvaluator` (`logic/risk_evaluator.py`)**:
-    *   **역할**: `Detection Layer`의 결과(사람, 자세, 위험 구역 침입)와 `InputAdapter`의 **센서 데이터**를 종합하여 잠재적인 위험도를 평가하고 정량화합니다.
-    *   **입력**: `detection_result` (사람, 자세, 위험 구역 정보), `sensor_data` (센서 알림 상태 포함).
-    *   **출력**: `risk_level` (safe, medium, high, critical) 및 `risk_score`, 상세 위험 요소 목록.
+### 2. Firestore 연결 및 데이터 관리
 
-*   **`ModeManager` (`logic/mode_manager.py`)**:
-    *   **역할**: 컨베이어 벨트의 현재 작동 상태를 기반으로 시스템의 작업 모드를 결정합니다.
-    *   **입력**: `is_conveyor_operating` (컨베이어 작동 여부 - `InputAdapter`의 센서 데이터에서 파생).
-    *   **출력**: 현재 작업 모드 (`'operating'` 또는 `'stopped'`).
-
-*   **`RuleEngine` (`logic/rule_engine.py`)**:
-    *   **역할**: `ModeManager`가 판단한 작업 모드와 `RiskEvaluator`가 평가한 위험도를 종합하여, 시스템이 취해야 할 최종 제어 명령 목록을 결정합니다.
-    *   **핵심 규칙**:
-        *   **IF `mode` is `'stopped'` (컨베이어 정지 상태)**:
-            *   **AND** `risk_level` is not `'safe'` (위험 구역 내 사람 감지 또는 센서 알림 등):
-                *   **Action**: `PREVENT_POWER_ON` (LOTO), `TRIGGER_ALARM_CRITICAL`, `LOG_LOTO_ACTIVE`.
-            *   **ELSE** (`risk_level` is `'safe'`):
-                *   **Action**: `ALLOW_POWER_ON`, `LOG_STOPPED_SAFE`.
-        *   **IF `mode` is `'operating'` (컨베이어 작동 상태)**:
-            *   **IF** `risk_level` is `'critical'` (예: 넘어짐, 심각한 자세 이상):
-                *   **Action**: `STOP_POWER`, `TRIGGER_ALARM_CRITICAL`, `LOG_CRITICAL_INCIDENT`.
-            *   **IF** `risk_level` is `'high'` (예: 위험 구역 침입):
-                *   **Action**: `SLOW_DOWN_50_PERCENT`, `TRIGGER_ALARM_HIGH`, `LOG_HIGH_RISK`.
-            *   **IF** `risk_level` is `'medium'`:
-                *   **Action**: `TRIGGER_ALARM_MEDIUM`, `LOG_MEDIUM_RISK`.
-            *   **ELSE** (`risk_level` is `'safe'`):
-                *   **Action**: `LOG_NORMAL_OPERATION`.
-    *   **공통**: 모든 위험 상황에 대해 `NOTIFY_UI` 액션 포함.
-
-*   **`LogicFacade` (`logic/logic_facade.py`)**:
-    *   **역할**: `RiskEvaluator`, `ModeManager`, `RuleEngine`의 복잡한 상호작용을 외부로부터 숨기는 통합 인터페이스.
-    *   **입력**: `detection_result` (from `Detector`), `sensor_data` (from `InputAdapter`).
-    *   **흐름**: `sensor_data`에서 컨베이어 작동 상태를 추출하여 `ModeManager`에 전달하고, `detection_result`와 `sensor_data`를 `RiskEvaluator`에 전달한 후, 최종적으로 `RuleEngine`을 통해 결정된 행동 목록을 반환합니다.
+- **중앙 관리**: `app.py`의 `lifespan` 이벤트를 통해 서버 시작 시 단 한 번만 Firestore 연결을 초기화하고, 생성된 클라이언트 객체를 `app.state`를 통해 전역적으로 공유합니다.
+- **데이터 모델**: `zone_api.py`는 Firestore의 데이터 구조(map의 배열)와 Python의 Pydantic 모델 간의 데이터 변환을 처리하여, 일관된 데이터 형식을 유지합니다.
