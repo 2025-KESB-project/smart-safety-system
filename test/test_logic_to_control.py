@@ -20,8 +20,8 @@ def test_logic_to_control():
     # 1. 모듈 초기화
     try:
         logic_facade = LogicFacade()
-        # mock_mode=True로 설정하여 하드웨어 연결 없이 테스트
-        control_facade = ControlFacade(mock_mode=True)
+        # mock_mode=False로 설정하여 실제 하드웨어와 연동
+        control_facade = ControlFacade(mock_mode=False)
         logger.success("LogicFacade와 ControlFacade 초기화 완료 (모의 제어 모드).")
     except Exception as e:
         logger.error(f"모듈 초기화 실패: {e}")

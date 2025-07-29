@@ -1,7 +1,9 @@
 import cv2
 import time
+import json
 from pathlib import Path
 from loguru import logger
+from typing import List, Dict, Any
 
 # 상위 디렉터리의 모듈을 가져오기 위한 경로 설정
 import sys
@@ -10,37 +12,53 @@ from input_adapter.input_facade import InputAdapter
 from detect.detect_facade import Detector
 
 # --- 설정 ---
-# InputAdapter 설정
-# mock_mode=False로 설정하여 실제 카메라를 사용합니다.
 INPUT_CONFIG = {
     'camera_index': 0,
     'mock_mode': False
 }
-
-# Detector 설정
 DETECTOR_CONFIG = {
     'person_detector': {'model_path': 'yolov8n.pt'},
     'pose_detector': {
         'pose_model_path': 'yolov8n-pose.pt',
         'fall_model_path': 'fall_det_1.pt'
-    },
-    'danger_zone_mapper': {'zone_config_path': 'detect/danger_zones.json'}
+    }
+    # danger_zone_mapper 설정은 더 이상 여기서 필요하지 않음
 }
-
+ZONE_CONFIG_PATH = 'detect/danger_zones.json' # 로컬 JSON 파일 경로
 WINDOW_NAME = "Input -> Detect Layer Test"
+
+class MockZoneService:
+    """
+    테스트를 위한 가짜 ZoneService.
+    Firestore 대신 로컬 JSON 파일에서 위험 구역 정보를 로드합니다.
+    """
+    def __init__(self, config_path: str):
+        self._zones = []
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                self._zones = json.load(f)
+            logger.info(f"MockZoneService: '{config_path}'에서 {len(self._zones)}개의 구역 로드 완료.")
+        except Exception as e:
+            logger.error(f"MockZoneService: '{config_path}' 파일 로드 실패: {e}")
+
+    def get_all_zones(self) -> List[Dict[str, Any]]:
+        """로드된 모든 구역 정보를 반환합니다."""
+        return self._zones
 
 def main():
     logger.info("Input -> Detect 파이프라인 테스트를 시작합니다...")
 
     # 1. InputAdapter 및 Detector 초기화
     try:
+        # 테스트용 MockZoneService를 생성하여 Detector에 주입
+        mock_zone_service = MockZoneService(config_path=ZONE_CONFIG_PATH)
+        
         input_adapter = InputAdapter(**INPUT_CONFIG)
-        detector = Detector(DETECTOR_CONFIG)
+        detector = Detector(config=DETECTOR_CONFIG, zone_service=mock_zone_service)
+        
         logger.success("InputAdapter와 Detector 초기화 완료.")
     except Exception as e:
-        import inspect, detect.pose_detector as pd
-        print("POSE FILE:", pd.__file__, "\nPOSE SIG :", inspect.signature(pd.PoseDetector.__init__))
-        logger.error(f"모듈 초기화 실패: {e}")
+        logger.error(f"모듈 초기화 실패: {e}", exc_info=True)
         return
 
     cv2.namedWindow(WINDOW_NAME)
@@ -49,14 +67,11 @@ def main():
     prev_time = 0
     while True:
         # 2. InputAdapter를 통해 입력 데이터 가져오기
-        # get_input()은 전처리된 프레임, 원본 프레임, 센서 데이터를 반환합니다.
         input_data = input_adapter.get_input()
         if input_data is None or input_data.get('frame') is None:
             logger.warning("입력 스트림이 종료되었거나 프레임을 가져올 수 없습니다.")
             break
 
-        # Detector는 전처리되지 않은 원본 프레임을 사용하는 것이 더 정확할 수 있습니다.
-        # 여기서는 원본 프레임(raw_frame)을 사용합니다.
         raw_frame = input_data['raw_frame']
 
         # 3. Detector를 사용하여 탐지 수행
