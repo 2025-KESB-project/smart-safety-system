@@ -66,7 +66,7 @@ export default function Dashboard() {
  // 4) 폴링: 5초마다 quietly 데이터 갱신 
   useEffect(() => {
     const interval = setInterval(() => fetchLogs(false), 5000);
-    return () => clearInterval(iv);
+    return () => clearInterval(interval);
   }, [fetchLogs]);
 
   // — 3) 로그아웃 처리

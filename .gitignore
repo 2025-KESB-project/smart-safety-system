@@ -2,6 +2,7 @@
 node_modules/
 dist/
 .env
+build/
 
 # Python
 __pycache__/
@@ -11,8 +12,17 @@ __pycache__/
 env/
 venv/
 
+# Large Model Files (*.pt, *.pth, etc.)
+*.pt
+*.pth
+
+# Image & Log Directories
+Img/
+logs/
+
 # VSCode
 .vscode/
+.idea/
 
 # macOS
 .DS_Store
@@ -28,3 +38,4 @@ venv/
 *.img
 # Firebase credentials
 config/firebase_credential.json
+
