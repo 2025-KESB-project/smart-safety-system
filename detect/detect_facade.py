@@ -43,7 +43,7 @@ class Detector:
         Returns:
             모든 탐지 결과를 종합한 딕셔너리
         """
-        """        # 1. 사람 탐지 (가장 기본)
+        # 1. 사람 탐지 (가장 기본)
         detected_persons = self.person_detector.detect(frame)
         
         # 사람이 없으면 더 이상 분석할 필요가 없음
@@ -96,7 +96,6 @@ class Detector:
         }
 
         return detection_result
-""
 
     def draw_detections(self, frame: np.ndarray, detection_result: Dict[str, Any]) -> np.ndarray:
         """
