@@ -1,4 +1,5 @@
 // src/pages/Dashboard/ControlBoard.jsx
+// 우측 하단의 컨트롤 보드 컴포넌트
 import React from 'react';
 import './ConveyorMode.css';
 
