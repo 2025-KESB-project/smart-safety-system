@@ -11,7 +11,7 @@ class PoseDetector:
     두 모델의 결과를 AND 조건으로 결합하여 넘어짐 상태를 정밀하게 탐지합니다.
     """
 
-    def __init__(self, pose_model_path='yolov8n-pose.pt', fall_model_path='fall_det_1.pt', conf_threshold=0.5):
+    def __init__(self, pose_model_path: str, fall_model_path: str, conf_threshold=0.5):
         """
         자세 탐지기 초기화. 2개의 모델을 로드합니다.
         1. self.pose_model: 사람의 관절과 바운딩 박스 탐지용
