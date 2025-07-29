@@ -107,7 +107,7 @@ async def run_safety_system(app: FastAPI):
                     
                     elif action_type and action_type.startswith('LOG_'):
                         risk_factors = logic_facade.last_risk_analysis.get("risk_factors", [])
-                        
+
                         # 로그 레벨과 설명을 결정
                         log_risk_level = "INFO"  # 기본값
                         description = "System is operating normally."
@@ -148,18 +148,18 @@ async def run_safety_system(app: FastAPI):
                 # 최종 상태를 다시 가져와서 화면에 표시
                 final_status = state_manager.get_status()
                 mode_text = f"Mode: {final_status.get('operation_mode', 'N/A')}"
-                
+
                 # 속도와 전원 상태를 조합하여 더 상세한 상태 텍스트 생성
                 is_on = final_status.get('conveyor_is_on', False)
                 speed = final_status.get('conveyor_speed', 100)
-                
+
                 if not is_on:
                     status_text = "Status: STOPPED"
                 elif speed < 100:
                     status_text = f"Status: SLOWDOWN ({speed}%)"
                 else:
                     status_text = "Status: RUNNING"
-                
+
                 risk_factors = logic_facade.last_risk_analysis.get("risk_factors", [])
                 risk_text = "Risk: DETECTED" if risk_factors else "Risk: SAFE"
                 risk_color = (0, 0, 255) if risk_factors else (0, 255, 0)
