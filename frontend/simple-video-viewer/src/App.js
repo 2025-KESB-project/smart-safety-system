@@ -1,25 +1,32 @@
-// import logo from './logo.svg';
+import React from 'react';
+
+import { Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 
-function App() {
-   // FastAPI 서버가 제공하는 실시간 영상 스트리밍 주소입니다.
-  const videoStreamUrl = "http://localhost:8000/api/video_feed";
+// 최상위 페이지들
+import Main  from './pages/main/Main';
+import Intro from './pages/Intro/Intro';
+import Login from './pages/Login/Login';
 
+// Dashboard 레이아웃
+import Dashboard from './pages/Dashboard/Dashboard';
+
+
+export default function App() {
   return (
-    <div className="App">
-      <main className="video-container">
-        <img
-            src={videoStreamUrl}
-            alt="실시간 영상 스트리밍"
-            width="800"
-            onError={(e) => {
-             // 만약 서버에 연결할 수 없으면, 이 메시지가 대신 보입니다.
-            e.target.alt = "영상 스트림에 연결할 수 없습니다. FastAPI 서버가 켜져 있는지, CORS설정이 올바른지 확인하세요.";
-        }}
-/>
-      </main>
-    </div>
+    <Routes>
+      {/* 기본 경로는 Main으로 시작 */}
+      <Route path="/" element={<Main />} />
+      {/* 독립 페이지 */}
+      <Route path="/intro" element={<Intro />} />
+      <Route path="/login" element={<Login />} />
+      {/* Dashboard 레이아웃 */}
+      <Route path="/dashboard" element={<Dashboard />} />
+      {/* 정의되지 않은 경로는 Main으로 리다이렉트 */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+
+    </Routes>
   );
 }
 
-export default App;
+

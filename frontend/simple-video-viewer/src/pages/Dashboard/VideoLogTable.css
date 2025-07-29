@@ -1,0 +1,95 @@
+.log-board {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+}
+
+.log-board h3 {
+  margin: 0 0 12px;
+  font-size: 18px;
+  color: #333;
+  font-weight: 600;
+}
+
+.log-board table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 6px;
+}
+
+.log-board thead th {
+  position: sticky;
+  top: 0;
+  background: #f0f4f8;
+  color: #555;
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 2px solid #e1e8f0;
+  z-index: 1;
+}
+
+.log-board td {
+  padding: 10px 12px;
+  font-size: 14px;
+  color: #444;
+}
+
+/* 기본 행 배경 */
+.log-board tbody tr {
+  background: #fafbfc;
+  transition: background 0.2s;
+  cursor: pointer;
+}
+
+/* 짝수/홀수 배경 */
+.log-board tbody tr:nth-child(even) {
+  background: #f4f7fb;
+}
+
+/* 호버 효과 */
+.log-board tbody tr:hover {
+  background: #e1f0ff;
+}
+
+/* 활성(선택) 행 */
+.log-board tbody tr.active {
+  outline: 2px solid #1890ff;
+}
+
+/* 위험도 단계별 배경 */
+.log-board tbody tr.status-safe {
+  background: #bfffe1f0;
+}
+.log-board tbody tr.status-medium {
+  background: #f7ff56;
+}
+.log-board tbody tr.status-high {
+  background: #ffb554ee;
+}
+.log-board tbody tr.status-critical {
+  background: #ff807e;
+}
+
+/* 날짜/시간 칼럼 고정 */
+.log-board td:nth-child(1),
+.log-board td:nth-child(2) {
+  white-space: nowrap;
+  width: 90px;
+}
+
+/* 스크롤바 커스터마이징 */
+.log-board::-webkit-scrollbar {
+  width: 6px;
+}
+.log-board::-webkit-scrollbar-track {
+  background: #f0f4f8;
+  border-radius: 3px;
+}
+.log-board::-webkit-scrollbar-thumb {
+  background: #c2c2c2;
+  border-radius: 3px;
+}
