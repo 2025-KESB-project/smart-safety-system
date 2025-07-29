@@ -42,14 +42,14 @@ class RiskEvaluator:
         }
         total_score = 0
         
-        # 1. 자세 분석 기반 위험 평가
-        poses = detection_result.get("poses", [])
-        for i, pose in enumerate(poses):
-            analysis = pose.get("analysis", {})
+        # 1. 통합된 person 객체 기반 위험 평가
+        persons = detection_result.get("persons", [])
+        for i, person in enumerate(persons):
+            analysis = person.get("pose_analysis", {})
             if analysis.get("is_falling"):
                 risk_detail = {
                     "type": "falling",
-                    "person_id": pose.get("person_id", i),
+                    "person_id": i,
                     "description": f"Person {i} is falling.",
                     "score": 95  # 가장 높은 위험 점수
                 }
@@ -59,7 +59,7 @@ class RiskEvaluator:
             elif analysis.get("is_crouching"):
                 risk_detail = {
                     "type": "crouching",
-                    "person_id": pose.get("person_id", i),
+                    "person_id": i,
                     "description": f"Person {i} is in an abnormal crouching pose.",
                     "score": 70
                 }

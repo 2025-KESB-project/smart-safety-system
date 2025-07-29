@@ -43,7 +43,7 @@ from server.background_worker import run_safety_system
 # --------------------------------------------------------------------------
 CONFIG = {
     'input': {'camera_index': 3, 'mock_mode': False},
-    'detector': {'person_detector': {'model_path': 'yolov8n.pt'}, 'pose_detector': {'model_path': 'yolov8n-pose.pt'}},
+    'detector': {'person_detector': {'model_path': 'yolov8n.pt'}, 'pose_detector': {'pose_model_path': 'yolov8n-pose.pt'}},
     'control': {'mock_mode': True},
     'service': {'firebase_credential_path': str(Path(__file__).parent.parent / "config" / "firebase_credential.json")}
 }
