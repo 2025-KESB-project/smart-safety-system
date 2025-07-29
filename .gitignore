@@ -39,3 +39,4 @@ logs/
 # Firebase credentials
 config/firebase_credential.json
 
+GEMINI.md
