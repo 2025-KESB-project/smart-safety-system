@@ -25,6 +25,9 @@ export default function Dashboard() {
   // 컨베이어 상태
   const [isOperating, setIsOperating] = useState(null);
 
+  // 컨트롤(시작/정지) 로딩 상태
+  const [controlLoading, setControlLoading] = useState(false);
+
   const navigate = useNavigate();
 
   // 1) 현재 시간 업데이트
@@ -66,7 +69,10 @@ export default function Dashboard() {
     }
   }, []);
   useEffect(() => { fetchLogs(true); }, [fetchLogs]);
-  useEffect(() => { const iv = setInterval(() => fetchLogs(false), 5000); return () => clearInterval(iv); }, [fetchLogs]);
+  useEffect(() => {
+    const iv = setInterval(() => fetchLogs(false), 5000);
+    return () => clearInterval(iv);
+  }, [fetchLogs]);
 
   // 3) 컨베이어 상태 조회
   const fetchConveyorStatus = useCallback(async () => {
@@ -75,16 +81,46 @@ export default function Dashboard() {
       if (!res.ok) throw new Error(res.status);
       const { is_operating } = await res.json();
       setIsOperating(is_operating);
-    } catch (e) { console.error('컨베이어 상태 조회 실패', e); }
+    } catch (e) {
+      console.error('컨베이어 상태 조회 실패', e);
+    }
   }, []);
   useEffect(() => { fetchConveyorStatus(); }, [fetchConveyorStatus]);
 
   // 4) 컨트롤 핸들러
-  const handleStart = async () => { await fetch('/api/control/start', { method: 'POST' }); fetchConveyorStatus(); };
-  const handleStop = async () => { await fetch('/api/control/stop',  { method: 'POST' }); fetchConveyorStatus(); };
+  const handleStart = async () => {
+    setControlLoading(true);
+    try {
+      const res = await fetch('/api/control/start', { method: 'POST' });
+      if (!res.ok) throw new Error(res.status);
+      await fetchConveyorStatus();
+    } catch (e) {
+      console.error(e);
+      alert('⚠️ 컨베이어 시작 중 오류가 발생했습니다.');
+    } finally {
+      setControlLoading(false);
+    }
+  };
+  const handleStop = async () => {
+    setControlLoading(true);
+    try {
+      const res = await fetch('/api/control/stop', { method: 'POST' });
+      if (!res.ok) throw new Error(res.status);
+      await fetchConveyorStatus();
+    } catch (e) {
+      console.error(e);
+      alert('⚠️ 컨베이어 정지 중 오류가 발생했습니다.');
+    } finally {
+      setControlLoading(false);
+    }
+  };
 
   // 5) 위험 구역 설정 핸들러
-  const startDangerMode   = () => { setIsDangerMode(true); setShowInstruction(true); setTimeout(() => setShowInstruction(false), 3000); };
+  const startDangerMode = () => {
+    setIsDangerMode(true);
+    setShowInstruction(true);
+    setTimeout(() => setShowInstruction(false), 3000);
+  };
   const handleDangerComplete = coords => {
     setSelectedZone(coords);
     setShowComplete(true);
@@ -94,7 +130,10 @@ export default function Dashboard() {
   };
 
   // 6) 로그아웃 처리
-  const handleLogoutConfirm = () => { setShowLogoutModal(false); navigate('/login'); };
+  const handleLogoutConfirm = () => {
+    setShowLogoutModal(false);
+    navigate('/login');
+  };
 
   return (
     <div className="dashboard">
@@ -110,35 +149,47 @@ export default function Dashboard() {
       </div>
 
       {/* 위험 구역 안내 메시지 */}
-      {showInstruction && <div className="center-message">⚠️ 화면을 클릭하여 점을 찍고 위험 구역을 설정하세요!</div>}
-      {showComplete    && <div className="center-message">✅ 위험 구역이 설정되었습니다!</div>}
+      {showInstruction && (
+        <div className="center-message">
+          ⚠️ 화면을 클릭하여 점을 찍고 위험 구역을 설정하세요!
+        </div>
+      )}
+      {showComplete && (
+        <div className="center-message">
+          ✅ 위험 구역이 설정되었습니다!
+        </div>
+      )}
 
       {/* 메인 레이아웃 */}
       <div className="main-layout">
         {/* 좌측 패널 (라이브 스트림 / 위험 구역 설정) */}
         <div className="left-panel">
           <div className="live-stream-wrapper">
-            {isDangerMode
-              ? <DangerZoneSelector onComplete={handleDangerComplete} />
-              : <>
-                  <LiveStreamContent eventId={activeId} />
-                  {selectedZone.length > 0 && <ZoneOverlay coords={selectedZone}/>}  
-                </>
-            }
+            {isDangerMode ? (
+              <DangerZoneSelector onComplete={handleDangerComplete} />
+            ) : (
+              <>
+                <LiveStreamContent eventId={activeId} />
+                {selectedZone.length > 0 && <ZoneOverlay coords={selectedZone} />}
+              </>
+            )}
           </div>
         </div>
 
         {/* 우측 패널 (로그 + 컨트롤) */}
         <div className="right-panel">
-          {loading && !logs.length
-            ? <div className="loading">로그 불러오는 중...</div>
-            : error
-              ? <div className="error">{error}</div>
-              : <VideoLogTable logs={logs} activeId={activeId} onSelect={setActiveId}/>
-          }
+          {loading && !logs.length ? (
+            <div className="loading">로그 불러오는 중...</div>
+          ) : error ? (
+            <div className="error">{error}</div>
+          ) : (
+            <VideoLogTable logs={logs} activeId={activeId} onSelect={setActiveId} />
+          )}
+
           {/* 분리된 컨베이어 모드 컴포넌트 */}
           <ConveyorMode
             isOperating={isOperating}
+            loading={controlLoading}
             onStart={handleStart}
             onStop={handleStop}
             onDangerMode={startDangerMode}
@@ -170,7 +221,7 @@ function ZoneOverlay({ coords }) {
     const ctx    = canvas.getContext('2d');
     const rect   = canvas.getBoundingClientRect();
     const dpr    = window.devicePixelRatio || 1;
-    canvas.width  = rect.width  * dpr;
+    canvas.width  = rect.width * dpr;
     canvas.height = rect.height * dpr;
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, rect.width, rect.height);
@@ -181,7 +232,14 @@ function ZoneOverlay({ coords }) {
     ctx.beginPath();
     ctx.moveTo(coords[0].x, coords[0].y);
     coords.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
-    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
   }, [coords]);
-  return <canvas ref={ref} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none'}}/>;
+  return (
+    <canvas
+      ref={ref}
+      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+    />
+  );
 }
