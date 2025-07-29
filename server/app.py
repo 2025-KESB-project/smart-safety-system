@@ -42,6 +42,7 @@ from server.background_worker import run_safety_system
 # 중앙 설정 (CONFIG)
 # --------------------------------------------------------------------------
 CONFIG = {
+
     'input': {'camera_index': 0, 'mock_mode': False},
     'detector': {'person_detector': {'model_path': 'yolov8n.pt'}, 'pose_detector': {'pose_model_path': 'yolov8n-pose.pt'}},
     'control': {'mock_mode': True},
