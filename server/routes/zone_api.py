@@ -4,7 +4,7 @@ from loguru import logger
 
 from ..services.zone_service import ZoneService
 from ..dependencies import get_zone_service
-from ..models.zone import DangerZone, DangerZoneCreate, ZoneResponse, Point
+from ..models.zone import DangerZone, DangerZoneCreate, DangerZoneBase, ZoneResponse, Point
 
 router = APIRouter(
     prefix="/api/zones",
