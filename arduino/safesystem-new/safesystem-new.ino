@@ -24,8 +24,8 @@ void setup() {
   pinMode(MOTOR_IN1, OUTPUT);
   pinMode(MOTOR_IN2, OUTPUT);
   
-  // 모터는 기본적으로 비활성화 상태로 시작
-  digitalWrite(MOTOR_ENA, HIGH); // HIGH일 때 비활성화라고 가정
+  // 모터는 기본적으로 비활성화 상태로 시작 (LOW일 때 비활성화라고 가정)
+  digitalWrite(MOTOR_ENA, LOW);
 
   // PIR 센서 핀 초기화
   pinMode(PIR_PIN, INPUT);
@@ -63,6 +63,8 @@ void motor() {
         analogWrite(MOTOR_ENA, pwmVal);
 
         Serial.print("Speed set to: ");
+        Serial.println(pwmVal);
+        Serial.print("Applied PWM to ENA: ");
         Serial.println(pwmVal);
       }
       else {

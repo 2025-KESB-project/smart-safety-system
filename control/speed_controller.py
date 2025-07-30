@@ -109,9 +109,12 @@ class SpeedController:
             
             # 's[값]\n' 형태의 명령 전송 (예: 's128\n')
             command = f"s{pwm_value}\n"
+            logger.debug(f"[실제] 아두이노로 전송할 명령: '{command.strip()}'")
             try:
                 self.arduino.write(command.encode('utf-8'))
-                logger.info(f"[실제] 모터 속도 제어: {percent}% (PWM: {pwm_value}), 이유: {reason}")
+                logger.debug(f"[실제] 명령 전송 완료: '{command.strip()}'")
+                logger.info(f"[실제] 모터 속도 제어: {percent}% (PWM: {pwm_value}), 이유: {reason})")
+
             except serial.SerialException as e:
                 logger.error(f"아두이노에 데이터 전송 실패: {e}")
         else:
