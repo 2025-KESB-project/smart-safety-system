@@ -24,7 +24,7 @@ export default function Dashboard() {
 
   // 컨베이어 상태
   const [isOperating, setIsOperating] = useState(null);
-
+  
   // 컨트롤(시작/정지) 로딩 상태
   const [controlLoading, setControlLoading] = useState(false);
 
@@ -56,8 +56,6 @@ export default function Dashboard() {
     try {
       const res = await fetch('http://localhost:8000/api/logs?limit=50');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const res = await fetch('/api/events?limit=50');
-      if (!res.ok) throw new Error(res.status);
       const data = await res.json();
       setLogs(data);
       if (data.length) setActiveId(data[0].id);
@@ -169,9 +167,9 @@ export default function Dashboard() {
               <DangerZoneSelector onComplete={handleDangerComplete} />
             ) : (
               <>
-                <LiveStreamContent eventId={activeId} />
+                  <LiveStreamContent eventId={activeId} />
                 {selectedZone.length > 0 && <ZoneOverlay coords={selectedZone} />}
-              </>
+                </>
             )}
           </div>
         </div>
@@ -190,7 +188,7 @@ export default function Dashboard() {
           <ConveyorMode
             isOperating={isOperating}
             loading={controlLoading}
-            onStart={handleStart}
+             onStart={handleStart}
             onStop={handleStop}
             onDangerMode={startDangerMode}
           />
