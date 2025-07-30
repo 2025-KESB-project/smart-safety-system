@@ -34,33 +34,31 @@ class LogicFacade:
         
         logger.info("LogicFacade 및 모든 하위 로직 모듈 초기화 완료.")
 
-    def process(self, detection_result: Dict[str, Any], sensor_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def process(self, detection_result: Dict[str, Any], sensor_data: Dict[str, Any], current_mode: str, current_conveyor_status: bool) -> List[Dict[str, Any]]:
         """
         전체 로직 파이프라인을 실행합니다.
         1. 위험도 평가
-        2. 작업 모드 결정
-        3. 최종 행동 결정
+        2. 최종 행동 결정
 
         Args:
             detection_result: Detector.detect()의 반환값
             sensor_data: InputAdapter에서 제공하는 센서 데이터
+            current_mode: SystemStateManager가 관리하는 현재 작업 모드 ('AUTOMATIC' 또는 'MAINTENANCE')
+            current_conveyor_status: PowerController가 관리하는 현재 컨베이어 작동 상태 (True/False)
 
         Returns:
             RuleEngine이 결정한 최종 행동 목록
         """
-        # 컨베이어 작동 상태 추출 (임시 가정: sensor_data 내 'conveyor_operating' 센서의 value가 1이면 작동 중)
-        # 실제 sensor_data 구조에 따라 이 부분은 변경되어야 합니다.
-        is_conveyor_operating = sensor_data.get('sensors', {}).get('conveyor_operating', {'value': 0})['value'] == 1
-
-        # 1. 위험도 평가 (센서 데이터 포함)
-        self.last_risk_analysis = self.risk_evaluator.evaluate(detection_result, sensor_data)
+        # 1. 위험도 평가
+        # RiskEvaluator에 컨베이어 상태를 명시적으로 전달합니다.
+        self.last_risk_analysis = self.risk_evaluator.evaluate(
+            detection_result,
+            sensor_data,
+            conveyor_status=current_conveyor_status
+        )
         
-        # 2. 작업 모드 결정 (컨베이어 작동 상태 기반)
-        current_mode = self.mode_manager.determine_mode(is_conveyor_operating)
-        
-        # 3. 최종 행동 결정
+        # 2. 최종 행동 결정 (외부에서 전달받은 모드와 위험도 분석 결과를 기반으로)
         actions = self.rule_engine.decide_actions(current_mode, self.last_risk_analysis)
         
-        # 4. 행동 '실행'은 LogicFacade의 책임이 아닙니다.
-        # 결정된 actions 목록을 그대로 반환하여 호출자(background_worker)가 처리하도록 합니다.
+        # 3. 결정된 actions 목록을 그대로 반환하여 호출자(background_worker)가 처리하도록 합니다.
         return actions

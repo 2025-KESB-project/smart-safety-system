@@ -1,40 +1,49 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from loguru import logger
 
-from server.background_worker import start_conveyor, stop_conveyor, get_conveyor_status
-from server.models.control import ControlResponse, ConveyorStatusResponse
+# 의존성 주입을 통해 중앙 관리 객체를 가져옵니다.
+from server.dependencies import get_state_manager
+from server.state_manager import SystemStateManager
+from server.models.status import SystemStatusResponse
 
-router = APIRouter(
-    prefix="/api/control",
-    tags=["System Control"]
-)
+router = APIRouter()
 
-@router.post("/start", response_model=ControlResponse, summary="컨베이어 작동 시작")
-def start_conveyor_endpoint():
+@router.post("/start_automatic", response_model=SystemStatusResponse, summary="운전 모드 시작")
+def start_automatic_mode(state_manager: SystemStateManager = Depends(get_state_manager)):
     """
-    컨베이어 벨트의 작동을 시작합니다. 
-    이미 작동 중인 경우에도 상태를 그대로 유지합니다 (멱등성).
+    안전 시스템의 논리적 상태를 '운전 모드(AUTOMATIC)'로 전환합니다.
+    실제 컨베이어의 제어는 백그라운드 워커와 로직 레이어가 담당합니다.
     """
-    start_conveyor()
-    message = "Request to start conveyor processed. Current status: ON"
-    logger.info(message)
-    return {"status": "success", "message": message}
+    logger.info("API 요청: '운전 모드' 시작")
+    status = state_manager.start_automatic_mode()
+    # API 계층에서는 물리적 상태를 확신할 수 없으므로, 논리적 상태만 반환하거나 물리적 상태를 None으로 표시합니다.
+    return SystemStatusResponse(**status, conveyor_is_on=None)
 
-@router.post("/stop", response_model=ControlResponse, summary="컨베이어 작동 정지")
-def stop_conveyor_endpoint():
+@router.post("/start_maintenance", response_model=SystemStatusResponse, summary="정비 모드 시작 (LOTO)")
+def start_maintenance_mode(state_manager: SystemStateManager = Depends(get_state_manager)):
     """
-    컨베이어 벨트의 작동을 정지합니다.
-    이미 정지된 경우에도 상태를 그대로 유지합니다 (멱등성).
+    안전 시스템의 논리적 상태를 '정비 모드(MAINTENANCE)'로 전환합니다. (LOTO)
+    이 API는 상태만 변경하며, 전원 차단은 백그라운드 로직에 의해 수행됩니다.
     """
-    stop_conveyor()
-    message = "Request to stop conveyor processed. Current status: OFF"
-    logger.info(message)
-    return {"status": "success", "message": message}
+    logger.info("API 요청: '정비 모드' 시작 (LOTO)")
+    status = state_manager.start_maintenance_mode()
+    return SystemStatusResponse(**status, conveyor_is_on=None)
 
-@router.get("/status", response_model=ConveyorStatusResponse, summary="컨베이어 현재 상태 조회")
-def get_status_endpoint():
+@router.post("/stop", response_model=SystemStatusResponse, summary="시스템 전체 정지")
+def stop_system(state_manager: SystemStateManager = Depends(get_state_manager)):
     """
-    현재 컨베이어 벨트의 작동 상태(ON/OFF)를 조회합니다.
+    모든 시스템 작동을 중지하고 논리적 상태를 비활성으로 전환합니다.
     """
-    is_operating = get_conveyor_status()
-    return {"is_operating": is_operating}
+    logger.info("API 요청: 시스템 전체 정지")
+    status = state_manager.stop_system_globally()
+    # 시스템 정지 시에는 물리적으로도 확실히 꺼지므로 False로 반환할 수 있습니다.
+    return SystemStatusResponse(**status, conveyor_is_on=False)
+
+@router.get("/status", response_model=SystemStatusResponse, summary="시스템 현재 논리적 상태 조회")
+def get_status(state_manager: SystemStateManager = Depends(get_state_manager)):
+    """
+    시스템의 현재 논리적 상태(모드)를 반환합니다.
+    물리적 상태(conveyor_is_on)를 포함한 전체 상태는 /status 엔드포인트를 확인하세요.
+    """
+    status = state_manager.get_status()
+    return SystemStatusResponse(**status, conveyor_is_on=None)

@@ -1,48 +1,79 @@
-import asyncio
-from fastapi import Depends, Request
+from fastapi import Request
 from loguru import logger
-from google.cloud.firestore_v1.client import Client
 
-from .services.zone_service import ZoneService
-from .services.db_service import DBService
-from .service_facade import ServiceFacade
+# 아키텍처 변경으로 인한 임포트 경로 수정
+from server.state_manager import SystemStateManager
+from control.control_facade import ControlFacade
+from detect.detect_facade import Detector
+from logic.logic_facade import LogicFacade
+from server.services.db_service import DBService
+from server.services.alert_service import AlertService
+from server.services.zone_service import ZoneService
 
-# --- Database Client Dependency ---
+# --- 중앙 관리 객체 의존성 ---
 
-def get_db_client(request: Request) -> Client:
+def get_state_manager(request: Request) -> SystemStateManager:
     """
-    Retrieves the shared Firestore client instance from the app state.
-    This dependency ensures that all parts of the app use the same DB client.
+    app.state에 저장된 공유 SystemStateManager 인스턴스를 가져옵니다.
     """
-    if not hasattr(request.app.state, 'db') or not request.app.state.db:
-        logger.error("Firestore client is not available in app.state.")
-        raise RuntimeError("Database client not initialized. Check server startup logs.")
-    return request.app.state.db
+    if not hasattr(request.app.state, 'state_manager'):
+        logger.critical("SystemStateManager가 app.state에 초기화되지 않았습니다!")
+        raise RuntimeError("SystemStateManager is not initialized.")
+    return request.app.state.state_manager
 
-# --- Service Dependencies ---
+def get_control_facade(request: Request) -> ControlFacade:
+    """
+    app.state에 저장된 공유 ControlFacade 인스턴스를 가져옵니다.
+    """
+    if not hasattr(request.app.state, 'control_facade'):
+        logger.critical("ControlFacade가 app.state에 초기화되지 않았습니다!")
+        raise RuntimeError("ControlFacade is not initialized.")
+    return request.app.state.control_facade
 
-def get_zone_service(db: Client = Depends(get_db_client)) -> ZoneService:
+def get_detector(request: Request) -> Detector:
     """
-    Creates and returns an instance of ZoneService, injecting the DB client.
+    app.state에 저장된 공유 Detector 인스턴스를 가져옵니다.
     """
-    return ZoneService(db=db)
+    if not hasattr(request.app.state, 'detector'):
+        logger.critical("Detector가 app.state에 초기화되지 않았습니다!")
+        raise RuntimeError("Detector is not initialized.")
+    return request.app.state.detector
 
-def get_db_service(request: Request, db: Client = Depends(get_db_client)) -> DBService:
+def get_logic_facade(request: Request) -> LogicFacade:
     """
-    Creates and returns an instance of DBService, injecting the DB client and the event loop from the app state.
+    app.state에 저장된 공유 LogicFacade 인스턴스를 가져옵니다.
     """
-    if not hasattr(request.app.state, 'loop') or not request.app.state.loop:
-        logger.error("Event loop is not available in app.state.")
-        raise RuntimeError("Event loop not initialized. Check server startup logs.")
-    
-    loop = request.app.state.loop
-    return DBService(db=db, loop=loop)
+    if not hasattr(request.app.state, 'logic_facade'):
+        logger.critical("LogicFacade가 app.state에 초기화되지 않았습니다!")
+        raise RuntimeError("LogicFacade is not initialized.")
+    return request.app.state.logic_facade
 
-def get_service_facade(request: Request) -> ServiceFacade:
+def get_db_service(request: Request) -> DBService:
     """
-    Retrieves the shared ServiceFacade instance from the app state.
+    app.state에 저장된 공유 DBService 인스턴스를 가져옵니다.
     """
-    if not hasattr(request.app.state, 'service_facade') or not request.app.state.service_facade:
-        logger.error("ServiceFacade is not available in app.state.")
-        raise RuntimeError("ServiceFacade not initialized. Check server startup logs.")
-    return request.app.state.service_facade
+    if not hasattr(request.app.state, 'db_service'):
+        logger.critical("DBService가 app.state에 초기화되지 않았습니다!")
+        raise RuntimeError("DBService is not initialized.")
+    return request.app.state.db_service
+
+def get_alert_service(request: Request) -> AlertService:
+    """
+    app.state에 저장된 공유 AlertService 인스턴스를 가져옵니다.
+    """
+    if not hasattr(request.app.state, 'alert_service'):
+        logger.critical("AlertService가 app.state에 초기화되지 않았습니다!")
+        raise RuntimeError("AlertService is not initialized.")
+    return request.app.state.alert_service
+
+def get_zone_service(request: Request) -> ZoneService:
+    """
+    ZoneService 인스턴스를 생성하여 반환합니다.
+    ZoneService는 DB 클라이언트에 의존합니다.
+    """
+    if not hasattr(request.app.state, 'db'):
+        logger.critical("DB client가 app.state에 초기화되지 않았습니다!")
+        raise RuntimeError("DB client is not initialized.")
+    # ZoneService는 상태를 갖지 않으므로, 요청 시마다 생성해도 무방합니다.
+    # 또는 app.state에 등록된 단일 인스턴스를 사용할 수도 있습니다.
+    return ZoneService(db=request.app.state.db)
