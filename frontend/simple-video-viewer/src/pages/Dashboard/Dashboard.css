@@ -1,4 +1,4 @@
-/* Dashboard.css */
+/* src/pages/Dashboard/Dashboard.css */
 
 html, body {
   margin: 0;
@@ -29,207 +29,189 @@ html, body {
   z-index: 100;
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
-
-.logo {
-  font-size: 22px;
-  font-weight: bold;
-  letter-spacing: 1px;
-}
-
-.right-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
+.logo { font-size:22px; font-weight:bold; letter-spacing:1px; }
+.right-info { display:flex; align-items:center; gap:12px; }
 .date-time {
-  background: #333;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: bold;
+  background:#333; padding:6px 12px; border-radius:6px;
+  font-size:14px; font-weight:bold;
 }
-
 .logout-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: #888;
-  color: #fff;
-  border: none;
-  padding: 8px 14px;
-  border-radius: 20px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: background 0.2s;
+  display:flex; align-items:center; gap:6px;
+  background:#888; color:#fff; border:none;
+  padding:8px 14px; border-radius:20px;
+  font-size:14px; cursor:pointer;
+  transition:background .2s;
 }
-.logout-btn:hover {
-  background: #fff;
-  color: #000;
-}
+.logout-btn:hover { background:#fff; color:#000; }
 
 /* 메인 레이아웃 */
 .main-layout {
-  display: flex;
-  position: absolute;
-  top: 60px; bottom: 20px; left: 0; right: 0;
-  padding: 20px;
-  gap: 20px;
-  box-sizing: border-box;
+  display:flex;
+  position:absolute;
+  top:60px; bottom:20px; left:0; right:0;
+  padding:20px;
+  gap:20px;
+  box-sizing:border-box;
 }
 
+/* 좌측 패널: 가운데 정렬 */
 .left-panel {
-  flex: 3; /* 기존 2 -> 3 으로 변경: 화면 넓이 비율 증가 */
-  display: flex;
-  flex-direction: column;
+  flex:3;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  min-height:0;  /* flex children 높이 제한 해제 */
+  padding:0;      /* wrapper padding 간섭 방지 */
 }
 
+/* live-stream-wrapper: 고정 너비/비율, 중앙 배치 */
 .live-stream-wrapper {
-  flex: 1;
-  background: #f9f9f9;
-  border-radius: 12px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  padding: 10px;
+  position:relative;
+  width:90%;            /* 좌측 패널 너비의 90% */
+  aspect-ratio:16/9;    /* 16:9 비율로 유지 */
+  background:#f9f9f9;
+  border-radius:12px;
+  overflow:hidden;
+  box-shadow:0 4px 12px rgba(0,0,0,0.1);
 }
 
-.live-stream-container {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  border-radius: 8px;
-  background: #000;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-.live-stream-container img,
-.live-stream-container video {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+/* ──────────── 자식 컨텐츠 전부 꽉 채우기 ──────────── */
+
+/* 1) DangerZoneSelector 모드의 img / canvas */
+.live-stream-wrapper .dz-wrapper,
+.live-stream-wrapper .dz-wrapper img,
+.live-stream-wrapper .dz-wrapper .dz-canvas {
+  position:absolute;
+  top:0; left:0; right:0; bottom:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
 }
 
+/* 2) 일반 스트림 모드의 live-stream-container & video */
+.live-stream-wrapper .live-stream-container {
+  position:absolute;
+  top:0; left:0; width:100%; height:100%;
+  overflow:hidden;
+}
+.live-stream-wrapper .live-stream-container video,
+.live-stream-wrapper .live-stream-container img {
+  position:absolute;
+  top:0; left:0;
+  width:100%; height:100%;
+  object-fit:cover;
+}
+
+/* 우측 패널 */
 .right-panel {
-  flex: 1; /* width 고정 제거, flex:1 으로 변경: left 3 : right 1 비율 */
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  gap:20px;
+  
 }
 
 /* 컨트롤 보드 */
 .control-board {
-  background: #fff;
-  border-radius: 8px;
-  padding: 16px;
-  box-shadow: 0 0 6px rgba(0,0,0,0.1);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  background:#fff;
+  border-radius:8px;
+  padding:16px;
+  box-shadow:0 0 6px rgba(0,0,0,0.1);
+  display:flex;
+  flex-direction:column;
+  gap:12px;
 }
-.control-board h3 {
-  margin-top: 0;
-  margin-bottom: 16px;
-}
+.control-board h3 { margin:0 0 16px; }
 .control-board button {
-  background: #333;
-  color: #fff;
-  border: none;
-  padding: 10px;
-  border-radius: 6px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: background 0.2s;
+  background:#333;
+  color:#fff;
+  border:none;
+  padding:10px;
+  border-radius:6px;
+  font-size:14px;
+  cursor:pointer;
+  transition:background .2s;
 }
-.control-board button:hover {
-  background: #666;
+.control-board button:hover { background:#666; }
+
+/* 로딩·에러 메시지 */
+.loading, .error {
+  padding:20px;
+  text-align:center;
+  font-size:16px;
+  color:#666;
+}
+.error { color:#c00; }
+
+/* 중앙 안내 메시지 */
+.center-message {
+  position:fixed;
+  top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  background:rgba(0,0,0,0.75);
+  color:#fff;
+  padding:12px 20px;
+  border-radius:8px;
+  font-size:18px;
+  z-index:1001;
+  pointer-events:none;
+  text-align:center;
+}
+
+/* 하단 생성/업데이트 완료 버튼 */
+.confirm-btn {
+  position:absolute;
+  bottom:20px; right:20px;
+  z-index:1002;
+  background:#e74c3c;
+  color:#fff;
+  border:none;
+  padding:10px 16px;
+  border-radius:6px;
+  font-size:14px;
+  cursor:pointer;
 }
 
 /* 로그아웃 모달 */
 .logout-overlay {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex; justify-content: center; align-items: center;
-  z-index: 1000;
+  position:fixed;
+  top:0; left:0;
+  width:100%; height:100%;
+  background:rgba(0,0,0,0.5);
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  z-index:1000;
 }
 .logout-modal {
-  background: #000;
-  padding: 40px;
-  border-radius: 20px;
-  text-align: center;
-  color: #fff;
-  min-width: 280px;
+  background:#000;
+  padding:40px;
+  border-radius:20px;
+  text-align:center;
+  color:#fff;
+  min-width:280px;
 }
 .logout-title {
-  font-size: 20px;
-  font-weight: bold;
-  margin-bottom: 20px;
+  font-size:20px;
+  font-weight:bold;
+  margin-bottom:20px;
 }
 .logout-buttons {
-  display: flex; gap: 20px; justify-content: center;
+  display:flex;
+  gap:20px;
+  justify-content:center;
 }
 .logout-buttons button {
-  background: #888;
-  border: none;
-  color: #fff;
-  padding: 10px 20px;
-  font-size: 16px;
-  border-radius: 20px;
-  cursor: pointer;
-  transition: background 0.2s;
+  background:#888;
+  border:none;
+  color:#fff;
+  padding:10px 20px;
+  font-size:16px;
+  border-radius:20px;
+  cursor:pointer;
+  transition:background .2s;
 }
 .logout-buttons button:hover {
-  background: #fff;
-  color: #000;
-}
-
-/* 로딩·에러 메시지 */
-.loading, .error {
-  padding: 20px;
-  text-align: center;
-  font-size: 16px;
-  color: #666;
-}
-.error {
-  color: #c00;
-}
-
-.live-stream-wrapper {
-  position: relative;    /* 가장 중요 */
-  flex: 1;
-  background: #f9f9f9;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
-
-/* wrapper 안의 모든 영상·캔버스가 꽉 차도록 */
-.live-stream-wrapper > * {
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-
-.center-message {
-  position: fixed;            /* 화면 전체에서 고정 위치 */
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: rgba(0, 0, 0, 0.75);
-  color: #fff;
-  padding: 12px 20px;
-  border-radius: 8px;
-  font-size: 18px;
-  z-index: 1001;             /* 모든 레이어 위에 뜨도록 */
-  text-align: center;
+  background:#fff;
+  color:#000;
 }
