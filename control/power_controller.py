@@ -13,7 +13,7 @@ class PowerState(Enum):
 
 class PowerController:
     """전원 제어 시스템 (GPIO 로직 제거 버전)"""
-
+    
     def __init__(self, mock_mode: bool = True, **kwargs):
         # 라즈베리파이를 사용하지 않으므로, 항상 모의 모드처럼 동작하거나
         # 아두이노를 통한 전원 제어 로직을 여기에 추가할 수 있습니다.
@@ -50,7 +50,7 @@ class PowerController:
     def _set_state_unsafe(self, new_state: PowerState, reason: str) -> bool:
         if self.current_state == new_state:
             return False
-
+        
         previous_state = self.current_state
         self.current_state = new_state
         
