@@ -1,11 +1,15 @@
+/* DangerZoneSelector.css */
+
+/* • 부모(.live-stream-wrapper)의 padding까지 포함해서 꽉 채우기 */
 .dz-wrapper {
   position: absolute;
-  top: 0; left: 0;
-  width: 100%;
-  height: 100%;
+  top: -10px;
+  right: -10px;
+  bottom: -10px;
+  left: -10px;
 }
 
-.dz-wrapper img {
+.dz-img {
   display: block;
   width: 100%;
   height: 100%;
@@ -20,13 +24,7 @@
   cursor: crosshair;
 }
 
+/* 내부 Complete 버튼 숨기기 */
 .dz-complete-btn {
-  position: absolute;
-  bottom: 10px; right: 10px;
-  padding: 8px 14px;
-  background: #e74c3c;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  z-index: 10;
+  display: none !important;
 }
