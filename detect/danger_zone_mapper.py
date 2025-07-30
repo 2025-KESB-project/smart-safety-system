@@ -14,8 +14,6 @@ from typing import List, Dict, Any, Tuple
 from loguru import logger
 import threading
 
-from server.services.zone_service import ZoneService
-
 class DangerZoneMapper:
     """다각형 위험 구역을 설정하고, 사람의 침입 여부를 정교하게 판단합니다.
        Firestore의 on_snapshot 리스너를 통해 위험 구역을 실시간으로 업데이트합니다.
