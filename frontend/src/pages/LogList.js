@@ -15,8 +15,8 @@ function LogList() {
     // 데이터를 불러오는 함수를 정의합니다.
     const fetchPastLogs = async () => {
       try {
-        // FastAPI 서버의 /api/events 엔드포인트에 데이터를 요청합니다.
-        const response = await fetch('http://localhost:8000/api/events?limit=50');
+        // FastAPI 서버의 /api/logs 엔드포인트에 데이터를 요청합니다.
+        const response = await fetch('http://localhost:8000/api/logs?limit=50');
         
         // 응답이 성공적이지 않으면 에러를 발생시킵니다.
         if (!response.ok) {

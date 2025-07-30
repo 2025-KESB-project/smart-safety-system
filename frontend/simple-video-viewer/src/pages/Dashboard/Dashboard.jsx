@@ -49,7 +49,7 @@ export default function Dashboard() {
     if (showLoading) setLoading(true);
     setError(null);
     try {
-      const res = await fetch('http://localhost:8000/api/events?limit=50');
+      const res = await fetch('http://localhost:8000/api/logs?limit=50');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setLogs(data);

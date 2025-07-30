@@ -71,3 +71,18 @@ class ZoneService:
         except Exception as e:
             logger.error(f"'{zone_id}' 구역 정보 삭제 중 오류 발생: {e}")
             return False
+
+    def register_listener(self, callback) -> None:
+        """
+        'danger_zones' 컬렉션에 대한 실시간 리스너(on_snapshot)를 등록합니다.
+        컬렉션에 변경이 있을 때마다 제공된 콜백 함수가 호출됩니다.
+
+        Args:
+            callback: 변경 사항을 처리할 콜백 함수.
+                      이 함수는 (doc_snapshot, changes, read_time)을 인자로 받습니다.
+        """
+        try:
+            self.collection_ref.on_snapshot(callback)
+            logger.info(f"'{self.collection_ref.id}' 컬렉션에 대한 실시간 리스너를 성공적으로 등록했습니다.")
+        except Exception as e:
+            logger.error(f"실시간 리스너 등록 중 심각한 오류 발생: {e}")

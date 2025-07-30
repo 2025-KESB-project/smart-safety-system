@@ -4,7 +4,7 @@ from loguru import logger
 
 from ..services.zone_service import ZoneService
 from ..dependencies import get_zone_service
-from ..models.zone import DangerZone, DangerZoneCreate, ZoneResponse, Point
+from ..models.zone import DangerZone, DangerZoneCreate, DangerZoneBase, ZoneResponse, Point
 
 router = APIRouter(
     prefix="/api/zones",
@@ -16,13 +16,13 @@ def get_all_zones(zone_service: ZoneService = Depends(get_zone_service)):
     """설정된 모든 위험 구역의 목록을 조회합니다."""
     try:
         zones_data = zone_service.get_all_zones()
-        # Firestore에서 받은 데이터(points가 map의 배열)를 Pydantic 모델(Point 객체의 리스트)로 변환
-        # 참고: Firestore는 2차원 배열을 직접 지원하지 않아, [{x: 값, y: 값}, ...] 형태로 저장해야 함
+        # Firestore에서 받은 데이터를 Pydantic 모델로 변환합니다.
+        # 데이터 형식이 맞지 않으면 여기서 ValidationError가 발생하여 문제를 즉시 알 수 있습니다.
         return [
             DangerZone(
-                id=zone.get('id'),
-                name=zone.get('name'),
-                points=[Point(x=p.get('x', 0), y=p.get('y', 0)) for p in zone.get('points', [])]
+                id=zone['id'],
+                name=zone['name'],
+                points=[Point(**p) for p in zone.get('points', [])]
             ) for zone in zones_data
         ]
     except Exception as e:
@@ -37,18 +37,18 @@ def get_zone_by_id(zone_id: str, zone_service: ZoneService = Depends(get_zone_se
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"ID가 '{zone_id}'인 구역을 찾을 수 없습니다.")
     
     return DangerZone(
-        id=zone.get('id'),
-        name=zone.get('name'),
-        points=[Point(x=p.get('x', 0), y=p.get('y', 0)) for p in zone.get('points', [])]
+        id=zone['id'],
+        name=zone['name'],
+        points=[Point(**p) for p in zone.get('points', [])]
     )
 
 @router.post("/", response_model=ZoneResponse, status_code=status.HTTP_201_CREATED, summary="새로운 위험 구역 생성")
 def create_zone(
-    zone_id: str = Body(..., embed=True, description="새 구역의 고유 ID"),
-    zone_data: DangerZoneCreate = Body(..., embed=True, description="새 구역의 데이터"),
+    zone_data: DangerZoneCreate,
+    zone_id: str = Body(..., alias="id", description="새 구역의 고유 ID"),
     zone_service: ZoneService = Depends(get_zone_service)
 ):
-    """지정된 ID와 데이터로 새로운 위험 구역을 생성합니다."""
+    """새로운 위험 구역을 생성합니다. 요청 본문에 `id`, `name`, `points`를 포함해야 합니다."""
     if zone_service.get_zone(zone_id):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"ID가 '{zone_id}'인 구역이 이미 존재합니다.")
     
@@ -61,7 +61,7 @@ def create_zone(
 @router.put("/{zone_id}", response_model=ZoneResponse, summary="위험 구역 정보 업데이트")
 def update_zone(
     zone_id: str,
-    zone_data: DangerZoneCreate,
+    zone_data: DangerZoneBase,
     zone_service: ZoneService = Depends(get_zone_service)
 ):
     """기존 위험 구역의 이름과 좌표를 업데이트합니다."""
