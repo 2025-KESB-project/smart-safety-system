@@ -75,6 +75,7 @@ class RuleEngine:
         
         # 1. 상태가 변경되었을 때만 로그 액션을 추가
         factor_types = sorted([f["type"] for f in risk_factors])
+        #AUTOMATIC-ZONE_INTRUSION 예시
         current_state = f"{mode}-{','.join(factor_types)}"
         if current_state != self.last_logged_state and log_action:
             actions.append(log_action)
