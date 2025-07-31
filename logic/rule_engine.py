@@ -48,12 +48,15 @@ class RuleEngine:
 
         # 규칙 1: 정비(MAINTENANCE) 모드 - LOTO(Lock-Out, Tag-Out) 로직
         elif mode == "MAINTENANCE":
+            # 정비 모드에서는 침입 여부와 관계없이 항상 전원을 차단합니다.
+            actions.append({"type": "POWER_OFF", "details": {"reason": "maintenance_mode_active"}})
+            
             if has_intrusion:
-                actions.append({"type": "POWER_OFF", "details": {"reason": "LOTO_zone_intrusion"}})
-                actions.append({"type": "TRIGGER_ALARM_CRITICAL", "details": {"reason": "LOTO"}})
+                # 침입이 있을 경우, 추가적으로 경고 및 로깅
+                actions.append({"type": "TRIGGER_ALARM_CRITICAL", "details": {"reason": "LOTO_zone_intrusion"}})
                 log_action = {"type": "LOG_LOTO_ACTIVE", "details": {}}
             else:
-                # 정비 모드이고, 침입이 없으면 아무것도 하지 않음 (전원 인가 방지)
+                # 침입이 없을 경우, 안전 상태 로깅
                 log_action = {"type": "LOG_MAINTENANCE_SAFE", "details": {}}
 
         # 규칙 2: 운전(AUTOMATIC) 모드
@@ -69,6 +72,7 @@ class RuleEngine:
             else:
                 # 운전 모드이고, 아무 위험이 없으면 정상 운전
                 actions.append({"type": "POWER_ON", "details": {"reason": "normal_operation"}})
+                actions.append({"type": "RESUME_FULL_SPEED", "details": {"reason": "safety_zone_clear"}})
                 log_action = {"type": "LOG_NORMAL_OPERATION", "details": {}}
 
         # --- 로깅 및 UI 알림 처리 ---
