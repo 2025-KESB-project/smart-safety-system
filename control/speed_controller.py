@@ -151,7 +151,7 @@ class SpeedController:
             return self.arduino.name
         return None
 
-    def get_system_status(self) -> Dict:
+    def get_status(self) -> Dict:
         """시스템 상태를 반환합니다."""
         return {
             'current_speed_percent': self.current_speed_percent,

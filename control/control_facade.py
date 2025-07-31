@@ -75,3 +75,11 @@ class ControlFacade:
     def get_power_status(self) -> dict:
         """PowerController의 현재 상태를 조회하여 반환합니다."""
         return self.power_controller.get_status()
+
+    def get_all_statuses(self) -> dict:
+        """모든 하위 컨트롤러의 상태를 취합하여 반환합니다."""
+        statuses = {}
+        statuses.update(self.power_controller.get_status())
+        statuses.update(self.speed_controller.get_status())
+        statuses.update(self.alert_controller.get_system_status())
+        return statuses

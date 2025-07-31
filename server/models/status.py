@@ -8,6 +8,11 @@ class ServiceStatus(BaseModel):
 
 class SystemStatusResponse(BaseModel):
     """전체 시스템 상태 응답 모델"""
+    system_is_active: bool = Field(..., description="시스템의 논리적 활성화 여부")
+    operation_mode: Optional[str] = Field(None, description="현재 작업 모드 (AUTOMATIC, MAINTENANCE)")
+    conveyor_is_on: bool = Field(..., description="컨베이어의 실제 전원 상태")
+    conveyor_speed: int = Field(..., description="컨베이어의 현재 속도")
+    # 여기에 다른 물리적 상태들을 추가할 수 있습니다.
     database_service: ServiceStatus = Field(..., description="데이터베이스 서비스의 상태")
     background_worker_alive: bool = Field(..., description="백그라운드 워커 스레드의 활성화 여부")
 
