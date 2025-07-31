@@ -4,108 +4,94 @@ from datetime import datetime
 
 class RuleEngine:
     """
-    작업 모드와 식별된 위험 사실 목록을 바탕으로 최종 시스템 행동을 결정하는 규칙 기반 엔진.
+    작업 모드와 위험도를 바탕으로 최종 시스템 행동을 결정하는 규칙 기반 엔진.
     """
 
     def __init__(self, config: Dict = None):
         """
         RuleEngine을 초기화합니다.
+        
+        Args:
+            config: 규칙 관련 설정
         """
         self.config = config or {}
         self.last_logged_state = None # 마지막으로 로깅한 상태를 저장
-        logger.info("RuleEngine 초기화 완료. (사실 기반)")
+        logger.info("RuleEngine 초기화 완료.")
 
     def decide_actions(self, mode: str, risk_analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         현재 상태에 따라 수행해야 할 행동 목록을 결정합니다.
 
         Args:
-            mode: SystemStateManager가 제공하는 현재 작업 모드 ('AUTOMATIC' or 'MAINTENANCE')
-            risk_analysis: RiskEvaluator가 평가한 위험 사실 목록
+            mode: state_manager에서 app.state로 받습니다.
+            risk_analysis: RiskEvaluator가 평가한 위험 분석 결과
 
         Returns:
             수행할 행동을 나타내는 딕셔너리 리스트
+            e.g., [{"type": "STOP_POWER", "details": {"reason": "critical_risk"}}]
         """
         actions = []
-        risk_factors = risk_analysis.get("risk_factors", [])
-        
-        # --- 위험 사실 존재 여부 확인 ---
-        has_intrusion = any(f["type"] == "ZONE_INTRUSION" for f in risk_factors)
-        is_falling = any(f["type"] == "POSTURE_FALLING" for f in risk_factors)
-        is_crouching = any(f["type"] == "POSTURE_CROUCHING" for f in risk_factors)
-        has_sensor_alert = any(f["type"] == "SENSOR_ALERT" for f in risk_factors)
+        risk_level = risk_analysis.get("risk_level", "safe")
+        risk_details = risk_analysis.get("details", {})
 
-        # --- 규칙 정의 ---
+        current_state = f"{mode}-{risk_level}"
         log_action = None
 
-        # 규칙 0: 비상 정지 조건 (모든 모드에서 최우선)
-        if is_falling or has_sensor_alert:
-            reason = "falling_detected" if is_falling else "sensor_alert"
-            log_type = "LOG_CRITICAL_FALLING" if is_falling else "LOG_CRITICAL_SENSOR"
-            actions.append({"type": "POWER_OFF", "details": {"reason": reason}})
-            actions.append({"type": "TRIGGER_ALARM_CRITICAL", "details": {"reason": reason}})
-            log_action = {"type": log_type, "details": {}}
+        # --- 규칙 정의 ---
 
-        # 규칙 1: 정비(MAINTENANCE) 모드 - LOTO(Lock-Out, Tag-Out) 로직
-        elif mode == "MAINTENANCE":
-            # 정비 모드에서는 침입 여부와 관계없이 항상 전원을 차단합니다.
-            actions.append({"type": "POWER_OFF", "details": {"reason": "maintenance_mode_active"}})
+        # 규칙 1: 컨베이어 작동 멈춤 (MAINTENANCE) 모드
+        if mode == "MAINTENANCE":
+            # LOTO 기능: 위험 구역에 사람이 있거나 센서 알림 시 전원 투입 방지
+            if risk_level != "safe": # 위험이 감지되면
+                actions.append({"type": "PREVENT_POWER_ON", "details": {"reason": "person_in_danger_zone", "risk_level": risk_level}})
+                actions.append({"type": "TRIGGER_ALARM_CRITICAL", "details": {"level": "critical", "risk_details": risk_details}})
+                log_action = {"type": "LOG_LOTO_ACTIVE", "details": {"risk_level": risk_level, "risk_details": risk_details}}
+            else: # 안전하게 멈춰있는 상태
+                actions.append({"type": "ALLOW_POWER_ON", "details": {"reason": "safe_to_operate"}})
+                log_action = {"type": "LOG_STOPPED_SAFE", "details": {}}
+
+        # 규칙 2: 컨베이어 작동 중 (AUTOMATIC) 모드
+        else: # mode == "AUTOMATIC"
+            if risk_level == "critical":
+                actions.append({"type": "STOP_POWER", "details": {"reason": "critical_risk_detected", "risk_level": risk_level}})
+                actions.append({"type": "TRIGGER_ALARM_CRITICAL", "details": {"level": "critical", "risk_details": risk_details}})
+                log_action = {"type": "LOG_CRITICAL_INCIDENT", "details": {"risk_level": risk_level, "risk_details": risk_details}}
             
-            if has_intrusion:
-                # 침입이 있을 경우, 추가적으로 경고 및 로깅
-                actions.append({"type": "TRIGGER_ALARM_CRITICAL", "details": {"reason": "LOTO_zone_intrusion"}})
-                log_action = {"type": "LOG_LOTO_ACTIVE", "details": {}}
-            else:
-                # 침입이 없을 경우, 안전 상태 로깅
-                log_action = {"type": "LOG_MAINTENANCE_SAFE", "details": {}}
+            elif risk_level == "high":
+                actions.append({"type": "SLOW_DOWN_50_PERCENT", "details": {"reason": "high_risk_detected", "risk_level": risk_level}})
+                actions.append({"type": "TRIGGER_ALARM_HIGH", "details": {"level": "high", "risk_details": risk_details}})
+                log_action = {"type": "LOG_HIGH_RISK", "details": {"risk_level": risk_level, "risk_details": risk_details}}
 
-        # 규칙 2: 운전(AUTOMATIC) 모드
-        elif mode == "AUTOMATIC":
-            if has_intrusion:
-                actions.append({"type": "REDUCE_SPEED_50", "details": {"reason": "zone_intrusion"}})
-                actions.append({"type": "TRIGGER_ALARM_HIGH", "details": {"reason": "intrusion"}})
-                log_action = {"type": "LOG_INTRUSION_SLOWDOWN", "details": {}}
-            elif is_crouching:
-                # 웅크린 자세는 위험 구역 밖에서는 경고만.
-                actions.append({"type": "TRIGGER_ALARM_MEDIUM", "details": {"reason": "crouching"}})
-                log_action = {"type": "LOG_CROUCHING_WARN", "details": {}}
-            else:
-                # 운전 모드이고, 아무 위험이 없으면 정상 운전
-                actions.append({"type": "POWER_ON", "details": {"reason": "normal_operation"}})
-                actions.append({"type": "RESUME_FULL_SPEED", "details": {"reason": "safety_zone_clear"}})
+            elif risk_level == "medium":
+                actions.append({"type": "TRIGGER_ALARM_MEDIUM", "details": {"level": "medium", "risk_details": risk_details}})
+                log_action = {"type": "LOG_MEDIUM_RISK", "details": {"risk_level": risk_level, "risk_details": risk_details}}
+            else: # safe
                 log_action = {"type": "LOG_NORMAL_OPERATION", "details": {}}
 
-        # --- 로깅 및 UI 알림 처리 ---
-        
-        # 1. 상태가 변경되었을 때만 로그 액션을 추가
-        factor_types = sorted([f["type"] for f in risk_factors])
-        #AUTOMATIC-ZONE_INTRUSION 예시
-        current_state = f"{mode}-{','.join(factor_types)}"
+        # 상태가 변경되었을 때만 로그 액션을 추가
         if current_state != self.last_logged_state and log_action:
             actions.append(log_action)
             self.last_logged_state = current_state
 
-        # 2. 위험 상황에 대해 UI 알림 (중복 알림 방지 필요 시 추가 로직 구현)
-        if risk_factors:
-            # UI에 보낼 가장 중요한 알림 하나를 선택 (예: 넘어짐/센서 > 침입 > 웅크림)
-            level = "safe"
-            message = ""
-            if is_falling:
-                level, message = "critical", "넘어짐 감지! 즉시 정지합니다."
-            elif has_sensor_alert:
-                level, message = "critical", "비상 센서 감지! 즉시 정지합니다."
-            elif has_intrusion:
-                level, message = "high", "위험 구역 침입 감지!"
-            elif is_crouching:
-                level, message = "medium", "웅크린 자세 감지. 주의가 필요합니다."
-
-            if level != "safe":
-                notification_details = {
-                    "type": "SYSTEM_ALERT",
-                    "level": level,
-                    "message": message,
-                    "timestamp": datetime.now().isoformat()
-                }
-                actions.append({"type": "NOTIFY_UI", "details": notification_details})
+        # 모든 위험 상황에 대해 UI 알림
+        if risk_level != "safe":
+            # 상세한 알림 메시지 생성
+            if isinstance(risk_details, dict):
+                reason = ', '.join(risk_details.keys())
+            elif isinstance(risk_details, str):
+                reason = risk_details
+            else:
+                reason = "알 수 없는 원인"
+            
+            alert_message = f"위험 수준 '{risk_level.upper()}' 감지. 원인: {reason}"
+            
+            # 웹소켓으로 보낼 상세 정보 구성 (AlertMessage 모델 형식 준수)
+            notification_details = {
+                "type": "SYSTEM_ALERT",
+                "level": risk_level,
+                "message": alert_message,
+                "timestamp": datetime.now().isoformat() # ISO 8601 형식으로 변환
+            }
+            actions.append({"type": "NOTIFY_UI", "details": notification_details})
 
         return actions
