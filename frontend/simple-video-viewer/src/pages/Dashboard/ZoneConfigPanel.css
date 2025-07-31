@@ -27,12 +27,12 @@
   gap:8px;
 }
 .zone-config-buttons button {
-  background:#333; color:#fff; border:none; padding:10px; border-radius:6px;
+  background:#333; color:#fff; border:none; padding:14px 10px; border-radius:6px;
   font-size:14px; cursor:pointer; transition:background 0.2s;
 }
 .zone-config-buttons button:hover:not(:disabled){background:#666;}
 .zone-config-buttons button:disabled {background:#ddd;color:#999;cursor:not-allowed;}
-.zone-config-buttons .active {background:#007bff;}
+.zone-config-buttons .active {background:rgb(115, 108, 154);}
 
 .zone-list {
   list-style:none; margin:0; padding:0; flex:1; overflow-y:auto;
