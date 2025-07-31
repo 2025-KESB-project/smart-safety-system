@@ -95,7 +95,7 @@ def run_safety_system(app: FastAPI):
                 control_actions = []
                 for action in actions:
                     action_type = action.get("type")
-                    if action_type in ['POWER_ON', 'POWER_OFF', 'REDUCE_SPEED_50']:
+                    if action_type in ['POWER_ON', 'POWER_OFF', 'REDUCE_SPEED_50'] or action_type.startswith('TRIGGER_ALARM_'):
                         control_actions.append(action)
                     
                     elif action_type and action_type.startswith('LOG_'):
