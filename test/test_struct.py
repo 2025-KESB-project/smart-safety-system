@@ -70,7 +70,14 @@ def main():
         mock_zone_service = MockZoneService()
         detector = Detector(config=CONFIG.get('detector', {}), zone_service=mock_zone_service)
         
-        control_facade = ControlFacade(**CONFIG.get('control', {}))
+        # ControlFacade 초기화 방식 변경
+        control_config = CONFIG.get('control', {})
+        control_facade = ControlFacade(
+            mock_mode=control_config.get('mock_mode', True),
+            serial_port=control_config.get('serial_port'),
+            baud_rate=control_config.get('baud_rate')
+        )
+        
         logic_facade = LogicFacade(config=CONFIG.get('logic', {}), service_facade=None)
         logger.success("모든 Facade 초기화 완료.")
     except Exception as e:
@@ -105,9 +112,13 @@ def main():
             detection_result = detector.detect(frame)
 
             # 로직 계층: 위험 판단 및 제어 명령 생성
-            # 정형 모드(작동 중)를 가정하기 위해 is_conveyor_operating 값을 True로 강제
-            sensor_data['sensors']['conveyor_operating'] = {'value': 1}
-            actions = logic_facade.process(detection_result=detection_result, sensor_data=sensor_data)
+            # LogicFacade.process 호출 방식 변경: current_mode와 current_conveyor_status 인자 추가
+            actions = logic_facade.process(
+                detection_result=detection_result, 
+                sensor_data=sensor_data,
+                current_mode='AUTOMATIC',  # 정형 모드(자동)로 가정
+                current_conveyor_status=True # 컨베이어가 작동 중인 것으로 가정
+            )
             
             # 제어 계층: 명령 실행
             if actions:
