@@ -5,7 +5,7 @@ from typing import List, Dict, Any
 from control.power_controller import PowerController
 from control.speed_controller import SpeedController
 from control.alert_controller import AlertController
-from server.services.alert_service import AlertService
+from server.services.websocket_service import WebSocketService
 from server.services.db_service import DBService
 
 class ControlFacade:
@@ -13,7 +13,7 @@ class ControlFacade:
     물리적 장치 제어를 위한 통합 인터페이스(Facade).
     각 컨트롤러의 인스턴스를 소유하고 관리합니다.
     """
-    def __init__(self, mock_mode: bool = True, alert_service: AlertService = None, db_service: DBService = None):
+    def __init__(self, mock_mode: bool = True, alert_service: WebSocketService = None, db_service: DBService = None):
         # 각 컨트롤러의 인스턴스를 생성하여 소유합니다.
         self.power_controller = PowerController(mock_mode=mock_mode)
         self.speed_controller = SpeedController(mock_mode=mock_mode)

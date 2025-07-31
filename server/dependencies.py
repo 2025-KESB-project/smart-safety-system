@@ -7,7 +7,7 @@ from control.control_facade import ControlFacade
 from detect.detect_facade import Detector
 from logic.logic_facade import LogicFacade
 from server.services.db_service import DBService
-from server.services.alert_service import AlertService
+from server.services.websocket_service import WebSocketService
 from server.services.zone_service import ZoneService
 
 # --- 중앙 관리 객체 의존성 ---
@@ -57,14 +57,14 @@ def get_db_service(request: Request) -> DBService:
         raise RuntimeError("DBService is not initialized.")
     return request.app.state.db_service
 
-def get_alert_service(request: Request) -> AlertService:
+def get_websocket_service(request: Request) -> 'WebSocketService':
     """
-    app.state에 저장된 공유 AlertService 인스턴스를 가져옵니다.
+    app.state에 저장된 공유 WebSocketService 인스턴스를 가져옵니다.
     """
-    if not hasattr(request.app.state, 'alert_service'):
-        logger.critical("AlertService가 app.state에 초기화되지 않았습니다!")
-        raise RuntimeError("AlertService is not initialized.")
-    return request.app.state.alert_service
+    if not hasattr(request.app.state, 'websocket_service'):
+        logger.critical("WebSocketService가 app.state에 초기화되지 않았습니다!")
+        raise RuntimeError("WebSocketService is not initialized.")
+    return request.app.state.websocket_service
 
 def get_zone_service(request: Request) -> ZoneService:
     """

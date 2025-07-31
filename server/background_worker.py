@@ -41,7 +41,7 @@ def run_safety_system(app: FastAPI):
         control_facade = app.state.control_facade
         detector = app.state.detector
         db_service = app.state.db_service
-        alert_service = app.state.alert_service
+        websocket_service = app.state.websocket_service
         loop = app.state.loop
     except AttributeError as e:
         logger.critical(f"app.state에서 객체를 가져오는 데 실패했습니다: {e}. Lifespan 초기화가 실패했을 수 있습니다.")
@@ -109,7 +109,7 @@ def run_safety_system(app: FastAPI):
                     
                     elif action_type == 'NOTIFY_UI':
                         # UI 알림은 비동기 함수이므로, 스레드 안전하게 이벤트 루프를 통해 실행
-                        coro = alert_service.connection_manager.broadcast(action.get("details", {}))
+                        coro = websocket_service.connection_manager.broadcast(action.get("details", {}))
                         asyncio.run_coroutine_threadsafe(coro, loop)
 
                 if control_actions:

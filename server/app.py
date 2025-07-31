@@ -28,7 +28,7 @@ from detect.detect_facade import Detector
 from logic.logic_facade import LogicFacade
 from server.services.db_service import DBService
 from server.services.zone_service import ZoneService
-from server.services.alert_service import AlertService
+from server.services.websocket_service import WebSocketService
 from server.background_worker import run_safety_system
 
 # --- 라우터 임포트 ---
@@ -91,8 +91,8 @@ async def lifespan(app: FastAPI):
         db_client = app.state.db
         
         # 서비스 계층 초기화 및 app.state에 등록
-        app.state.db_service = DBService(db=db_client, loop=app.state.loop)
-        app.state.alert_service = AlertService()
+        app.state.websocket_service = WebSocketService()
+        app.state.db_service = DBService(db=db_client, loop=app.state.loop, websocket_service=app.state.websocket_service)
         zone_service = ZoneService(db=db_client)
         
         # 제어 계층 Facade 초기화

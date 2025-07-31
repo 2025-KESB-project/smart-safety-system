@@ -23,7 +23,7 @@ class RuleEngine:
         현재 상태에 따라 수행해야 할 행동 목록을 결정합니다.
 
         Args:
-            mode: ModeManager가 판단한 현재 작업 모드 ('normal_work' or 'abnormal_work')
+            mode: state_manager에서 app.state로 받습니다.
             risk_analysis: RiskEvaluator가 평가한 위험 분석 결과
 
         Returns:
@@ -39,8 +39,8 @@ class RuleEngine:
 
         # --- 규칙 정의 ---
 
-        # 규칙 1: 컨베이어 작동 멈춤 (stopped) 모드
-        if mode == "stopped":
+        # 규칙 1: 컨베이어 작동 멈춤 (MAINTENANCE) 모드
+        if mode == "MAINTENANCE":
             # LOTO 기능: 위험 구역에 사람이 있거나 센서 알림 시 전원 투입 방지
             if risk_level != "safe": # 위험이 감지되면
                 actions.append({"type": "PREVENT_POWER_ON", "details": {"reason": "person_in_danger_zone", "risk_level": risk_level}})
@@ -50,8 +50,8 @@ class RuleEngine:
                 actions.append({"type": "ALLOW_POWER_ON", "details": {"reason": "safe_to_operate"}})
                 log_action = {"type": "LOG_STOPPED_SAFE", "details": {}}
 
-        # 규칙 2: 컨베이어 작동 중 (operating) 모드
-        else: # mode == "operating"
+        # 규칙 2: 컨베이어 작동 중 (AUTOMATIC) 모드
+        else: # mode == "AUTOMATIC"
             if risk_level == "critical":
                 actions.append({"type": "STOP_POWER", "details": {"reason": "critical_risk_detected", "risk_level": risk_level}})
                 actions.append({"type": "TRIGGER_ALARM_CRITICAL", "details": {"level": "critical", "risk_details": risk_details}})
