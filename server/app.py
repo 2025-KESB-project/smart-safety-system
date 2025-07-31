@@ -98,6 +98,10 @@ async def lifespan(app: FastAPI):
         app.state.control_facade = ControlFacade(mock_mode=CONFIG['control']['mock_mode'])
         logger.success("ControlFacade 초기화 완료.")
 
+        # 1. 시스템의 논리적 상태를 관리할 중앙 관리자 인스턴스화 (ControlFacade 주입)
+        app.state.state_manager = SystemStateManager(control_facade=app.state.control_facade)
+        logger.success("SystemStateManager 초기화 완료.")
+
         # 탐지 및 로직 계층 Facade 초기화
         app.state.detector = Detector(config=CONFIG.get('detector', {}), zone_service=zone_service)
         app.state.logic_facade = LogicFacade(config=CONFIG)
