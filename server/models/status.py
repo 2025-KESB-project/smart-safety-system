@@ -1,4 +1,6 @@
 from pydantic import BaseModel, Field
+from typing import Optional
+
 
 class ServiceStatus(BaseModel):
     """서비스의 상태를 나타내는 모델"""
