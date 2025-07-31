@@ -100,20 +100,31 @@ def run_safety_system(app: FastAPI):
                     
                     elif action_type and action_type.startswith('LOG_'):
                         risk_factors = logic_facade.last_risk_analysis.get("risk_factors", [])
-
-                        # 단지 로그 종류 (색깔!)
+                        
+                        # 로그 레벨과 설명을 결정
                         log_risk_level = "INFO"  # 기본값
-                        if any(f["type"] == "POSTURE_FALLING" for f in risk_factors) or \
-                           any(f["type"] == "SENSOR_ALERT" for f in risk_factors):
+                        description = "System is operating normally."
+
+                        # 가장 중요한 위험 사실 하나를 찾아 설명과 레벨을 설정
+                        if any(f["type"] == "POSTURE_FALLING" for f in risk_factors):
                             log_risk_level = "CRITICAL"
+                            description = "A person falling has been detected."
+                        elif any(f["type"] == "SENSOR_ALERT" for f in risk_factors):
+                            log_risk_level = "CRITICAL"
+                            sensor_type = next((f.get("sensor_type") for f in risk_factors if f["type"] == "SENSOR_ALERT"), "unknown")
+                            description = f"An emergency signal from sensor '{sensor_type}' has been detected."
                         elif any(f["type"] == "ZONE_INTRUSION" for f in risk_factors):
                             log_risk_level = "WARNING"
+                            intrusion_details = next((f.get("details") for f in risk_factors if f["type"] == "ZONE_INTRUSION"), [])
+                            zone_names = ", ".join(list(set(alert["zone_name"] for alert in intrusion_details)))
+                            description = f"Person detected in danger zone(s): {zone_names}."
                         elif any(f["type"] == "POSTURE_CROUCHING" for f in risk_factors):
                             log_risk_level = "NOTICE"
+                            description = "A person in a crouching pose has been detected."
 
                         event_data = {
                             "event_type": action_type,
-                            "details": action.get("details", {}),
+                            "details": {"description": description},
                             "log_risk_level": log_risk_level
                         }
                         db_service.log_event(event_data)
