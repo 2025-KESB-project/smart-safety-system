@@ -5,15 +5,14 @@ from .risk_evaluator import RiskEvaluator
 from .mode_manager import ModeManager
 from .rule_engine import RuleEngine
 # ControlFacade는 더 이상 LogicFacade에서 직접 사용하지 않습니다.
-# from control.control_facade import ControlFacade 
-from server.service_facade import ServiceFacade
+# from control.control_facade import ControlFacade
 
 class LogicFacade:
     """
     Logic Layer의 모든 구성 요소를 통합하여 단순화된 인터페이스를 제공하는 퍼사드 클래스.
     """
 
-    def __init__(self, config: Dict = None, service_facade: ServiceFacade = None):
+    def __init__(self, config: Dict = None):
         """
         LogicFacade를 초기화하고 하위 모듈들을 생성합니다.
         
