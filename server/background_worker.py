@@ -76,9 +76,11 @@ def run_safety_system(app: FastAPI):
 
             # 2. 시스템 활성화 상태일 때만 안전 로직 및 시각화 수행
             if state_manager.is_active():
+                # StateManager를 통해 논리적/물리적 상태를 한 번에 가져옵니다.
+                current_status = state_manager.get_status()
+                current_mode = current_status.get("operation_mode")
+                conveyor_is_on = current_status.get("conveyor_is_on", False)
                 sensor_data = input_data['sensor_data']
-                current_mode = state_manager.get_mode()
-                conveyor_status = control_facade.get_power_status()['conveyor_is_on']
 
                 # 객체 탐지
                 detection_result = detector.detect(raw_frame)
@@ -88,7 +90,7 @@ def run_safety_system(app: FastAPI):
                     detection_result=detection_result,
                     sensor_data=sensor_data,
                     current_mode=current_mode,
-                    current_conveyor_status=conveyor_status
+                    current_conveyor_status=conveyor_is_on
                 )
 
                 # 액션 실행 (조정자가 실행 분배)
@@ -139,11 +141,11 @@ def run_safety_system(app: FastAPI):
                 # 시각화 및 스트리밍 프레임 업데이트
                 display_frame = detector.draw_detections(raw_frame, detection_result)
                 
-                mode_text = f"Mode: {current_mode}"
-                final_conveyor_status = control_facade.get_power_status()['conveyor_is_on']
-                status_text = "Status: RUNNING" if final_conveyor_status else "Status: STOPPED"
+                # 최종 상태를 다시 가져와서 화면에 표시
+                final_status = state_manager.get_status()
+                mode_text = f"Mode: {final_status.get('operation_mode', 'N/A')}"
+                status_text = "Status: RUNNING" if final_status.get('conveyor_is_on') else "Status: STOPPED"
                 
-                # 위험 요소 존재 여부에 따라 시각화 텍스트 결정
                 risk_factors = logic_facade.last_risk_analysis.get("risk_factors", [])
                 risk_text = "Risk: DETECTED" if risk_factors else "Risk: SAFE"
                 risk_color = (0, 0, 255) if risk_factors else (0, 255, 0)
