@@ -1,5 +1,5 @@
 // src/hooks/useWebSocket.js
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * WebSocket 연결을 관리하고, 메시지를 수신하면 onMessage 콜백을 호출합니다.
