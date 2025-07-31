@@ -1,57 +1,77 @@
-import logging
+from loguru import logger
 from typing import List, Dict, Any
 
-from control.alert_controller import AlertController
+# 변경된 PowerController를 임포트합니다.
 from control.power_controller import PowerController
 from control.speed_controller import SpeedController
-# ServiceFacade를 임포트합니다.
-from server.service_facade import ServiceFacade
-
-logger = logging.getLogger(__name__)
+from control.alert_controller import AlertController
+from server.services.alert_service import AlertService
+from server.services.db_service import DBService
 
 class ControlFacade:
-    def __init__(self, mock_mode: bool = True, service_facade: ServiceFacade = None):
-        self.alert_controller = AlertController(mock_mode=mock_mode)
+    """
+    물리적 장치 제어를 위한 통합 인터페이스(Facade).
+    각 컨트롤러의 인스턴스를 소유하고 관리합니다.
+    """
+    def __init__(self, mock_mode: bool = True, alert_service: AlertService = None, db_service: DBService = None):
+        # 각 컨트롤러의 인스턴스를 생성하여 소유합니다.
         self.power_controller = PowerController(mock_mode=mock_mode)
         self.speed_controller = SpeedController(mock_mode=mock_mode)
-        # ServiceFacade를 주입받습니다.
-        self.service_facade = service_facade
-        if self.service_facade is None:
-            logger.warning("ServiceFacade가 주입되지 않았습니다. 서비스 관련 기능이 제한될 수 있습니다.")
-            # 테스트 목적으로 ServiceFacade가 없을 경우를 대비하여 더미 객체 할당
-            class DummyServiceFacade:
-                def notify_ui(self, *args, **kwargs): pass
-                def log_event(self, *args, **kwargs): pass
-                def get_system_status(self, *args, **kwargs): return {}
-            self.service_facade = DummyServiceFacade()
+        self.alert_controller = AlertController(mock_mode=mock_mode)
+        
+        # 외부 서비스(UI 알림, DB 로깅)를 위한 서비스 객체를 주입받습니다.
+        self.alert_service = alert_service
+        self.db_service = db_service
+        logger.info("ControlFacade 초기화 완료.")
 
     def execute_actions(self, actions: List[Dict[str, Any]]):
         """
-        Executes a list of control actions determined by the RuleEngine.
-        Each action is a dictionary with 'type' and 'details'.
+        '두뇌(Logic Layer)'가 결정한 액션 목록을 받아 '근육'을 움직입니다.
         """
+        if not actions:
+            return
+
+        # 나중에 우선순위가 필요할 경우를 대비해 정렬할 수 있습니다.
+        # actions.sort(key=lambda x: x.get('priority', 100))
+
         for action in actions:
             action_type = action.get("type")
             details = action.get("details", {})
+            reason = details.get('reason', '자동 시스템 로직에 의해')
 
-            if action_type == "PREVENT_POWER_ON":
-                self.power_controller.prevent_power_on(details.get('reason'))
-            elif action_type == "ALLOW_POWER_ON":
-                self.power_controller.allow_power_on(details.get('reason'))
-            elif action_type == "STOP_POWER":
-                self.power_controller.stop_power(details.get('reason'))
-            elif action_type == "SLOW_DOWN_50_PERCENT":
-                self.speed_controller.slow_down_50_percent(details.get('reason'))
-            elif action_type == "TRIGGER_ALARM_CRITICAL":
-                self.alert_controller.trigger_critical_alarm(details.get('message'))
-            elif action_type == "TRIGGER_ALARM_HIGH":
-                self.alert_controller.trigger_high_alarm(details.get('message'))
-            elif action_type == "TRIGGER_ALARM_MEDIUM":
-                self.alert_controller.trigger_medium_alarm(details.get('message'))
+            logger.debug(f"Executing action: {action_type} with reason: {reason}")
+
+            if action_type == "POWER_ON":
+                self.power_controller.turn_on(reason)
+            elif action_type == "POWER_OFF":
+                self.power_controller.turn_off(reason)
+            elif action_type == "REDUCE_SPEED_50":
+                self.speed_controller.slow_down_50_percent(reason)
+            elif action_type == "TRIGGER_ALARM":
+                level = details.get('level', 'medium')
+                message = details.get('message', '알 수 없는 경고')
+                self.alert_controller.trigger_alarm(level, message)
             elif action_type == "NOTIFY_UI":
-                self.service_facade.notify_ui(details)
+                if self.alert_service:
+                    # 비동기 함수를 호출해야 할 경우, 이벤트 루프를 통해 실행해야 합니다.
+                    # 여기서는 단순화를 위해 직접 호출 가능한 동기 함수라고 가정합니다.
+                    # 실제 구현에서는 asyncio.run_coroutine_threadsafe 등을 사용해야 합니다.
+                    logger.info(f"UI 알림: {details}")
+                else:
+                    logger.warning("AlertService가 없어 UI 알림을 보낼 수 없습니다.")
             elif action_type.startswith("LOG_"):
-                self.service_facade.log_event(action_type, details)
+                if self.db_service:
+                    log_data = {
+                        "event_type": action_type,
+                        "details": details,
+                        "risk_level": details.get("risk_level", "N/A")
+                    }
+                    self.db_service.log_event(log_data)
+                else:
+                    logger.warning("DBService가 없어 이벤트를 기록할 수 없습니다.")
             else:
-                # 알 수 없는 액션 타입은 경고 로그로 남깁니다.
-                self.service_facade.logger_service.log_warning(f"Unknown action type: {action_type}")
+                logger.warning(f"알 수 없는 액션 타입 '{action_type}'은 무시됩니다.")
+
+    def get_power_status(self) -> dict:
+        """PowerController의 현재 상태를 조회하여 반환합니다."""
+        return self.power_controller.get_status()

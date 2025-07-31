@@ -12,7 +12,7 @@ router = APIRouter(
 )
 
 @router.get(
-    "/", 
+    "", 
     response_model=List[LogMessage],
     summary="Get Archived Event Logs",
     description="Retrieves a list of the most recent event logs from the database, sorted by timestamp."

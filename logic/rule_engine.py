@@ -15,6 +15,7 @@ class RuleEngine:
             config: 규칙 관련 설정
         """
         self.config = config or {}
+        self.last_logged_state = None # 마지막으로 로깅한 상태를 저장
         logger.info("RuleEngine 초기화 완료.")
 
     def decide_actions(self, mode: str, risk_analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -33,6 +34,9 @@ class RuleEngine:
         risk_level = risk_analysis.get("risk_level", "safe")
         risk_details = risk_analysis.get("details", {})
 
+        current_state = f"{mode}-{risk_level}"
+        log_action = None
+
         # --- 규칙 정의 ---
 
         # 규칙 1: 컨베이어 작동 멈춤 (stopped) 모드
@@ -41,28 +45,33 @@ class RuleEngine:
             if risk_level != "safe": # 위험이 감지되면
                 actions.append({"type": "PREVENT_POWER_ON", "details": {"reason": "person_in_danger_zone", "risk_level": risk_level}})
                 actions.append({"type": "TRIGGER_ALARM_CRITICAL", "details": {"level": "critical", "risk_details": risk_details}})
-                actions.append({"type": "LOG_LOTO_ACTIVE", "details": {"risk_level": risk_level, "risk_details": risk_details}})
+                log_action = {"type": "LOG_LOTO_ACTIVE", "details": {"risk_level": risk_level, "risk_details": risk_details}}
             else: # 안전하게 멈춰있는 상태
                 actions.append({"type": "ALLOW_POWER_ON", "details": {"reason": "safe_to_operate"}})
-                actions.append({"type": "LOG_STOPPED_SAFE", "details": {}})
+                log_action = {"type": "LOG_STOPPED_SAFE", "details": {}}
 
         # 규칙 2: 컨베이어 작동 중 (operating) 모드
         else: # mode == "operating"
             if risk_level == "critical":
                 actions.append({"type": "STOP_POWER", "details": {"reason": "critical_risk_detected", "risk_level": risk_level}})
                 actions.append({"type": "TRIGGER_ALARM_CRITICAL", "details": {"level": "critical", "risk_details": risk_details}})
-                actions.append({"type": "LOG_CRITICAL_INCIDENT", "details": {"risk_level": risk_level, "risk_details": risk_details}})
+                log_action = {"type": "LOG_CRITICAL_INCIDENT", "details": {"risk_level": risk_level, "risk_details": risk_details}}
             
             elif risk_level == "high":
                 actions.append({"type": "SLOW_DOWN_50_PERCENT", "details": {"reason": "high_risk_detected", "risk_level": risk_level}})
                 actions.append({"type": "TRIGGER_ALARM_HIGH", "details": {"level": "high", "risk_details": risk_details}})
-                actions.append({"type": "LOG_HIGH_RISK", "details": {"risk_level": risk_level, "risk_details": risk_details}})
+                log_action = {"type": "LOG_HIGH_RISK", "details": {"risk_level": risk_level, "risk_details": risk_details}}
 
             elif risk_level == "medium":
                 actions.append({"type": "TRIGGER_ALARM_MEDIUM", "details": {"level": "medium", "risk_details": risk_details}})
-                actions.append({"type": "LOG_MEDIUM_RISK", "details": {"risk_level": risk_level, "risk_details": risk_details}})
+                log_action = {"type": "LOG_MEDIUM_RISK", "details": {"risk_level": risk_level, "risk_details": risk_details}}
             else: # safe
-                actions.append({"type": "LOG_NORMAL_OPERATION", "details": {}})
+                log_action = {"type": "LOG_NORMAL_OPERATION", "details": {}}
+
+        # 상태가 변경되었을 때만 로그 액션을 추가
+        if current_state != self.last_logged_state and log_action:
+            actions.append(log_action)
+            self.last_logged_state = current_state
 
         # 모든 위험 상황에 대해 UI 알림
         if risk_level != "safe":

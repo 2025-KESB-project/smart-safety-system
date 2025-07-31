@@ -16,13 +16,14 @@ class RiskEvaluator:
         self.config = config or {}
         logger.info("RiskEvaluator 초기화 완료.")
 
-    def evaluate(self, detection_result: Dict[str, Any], sensor_data: Dict[str, Any]) -> Dict[str, Any]:
+    def evaluate(self, detection_result: Dict[str, Any], sensor_data: Dict[str, Any], conveyor_status: bool) -> Dict[str, Any]:
         """
         탐지 결과를 종합하여 위험도를 평가합니다.
 
         Args:
             detection_result: Detector.detect()의 반환값
             sensor_data: InputAdapter에서 제공하는 센서 데이터
+            conveyor_status: 현재 컨베이어 작동 상태 (True/False). 현재 로직에서는 사용되지 않으나, 향후 확장을 위해 전달받음.
 
         Returns:
             위험 평가가 추가된 분석 결과 딕셔너리

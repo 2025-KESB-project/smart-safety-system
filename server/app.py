@@ -4,7 +4,6 @@ import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 import os
-from datetime import datetime
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,27 +21,23 @@ logger.add(
     format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}:{function}:{line}</cyan> - <level>{message}</level>"
 )
 
-# --- 라우터 및 서비스 모듈 임포트 ---
-from server.models.status import SystemStatusResponse
-from server.routes.log_api import router as log_api_router
-from server.routes.streaming import router as streaming_router
-from server.routes.alert_ws import router as websocket_router
-from server.routes.zone_api import router as zone_router
-from server.routes.control_api import router as control_router
-from server.routes.log_ws import router as log_stream_router
-from server.service_facade import ServiceFacade
-from server.services.db_service import DBService
-from server.services.zone_service import ZoneService
-from server.services.alert_service import AlertService # AlertService 임포트
+# --- 아키텍처 변경에 따른 임포트 수정 ---
+from server.state_manager import SystemStateManager
+from control.control_facade import ControlFacade
 from detect.detect_facade import Detector
 from logic.logic_facade import LogicFacade
+from server.services.db_service import DBService
+from server.services.zone_service import ZoneService
+from server.services.alert_service import AlertService
 from server.background_worker import run_safety_system
+
+# --- 라우터 임포트 ---
+from server.routes import log_api, streaming, alert_ws, zone_api, control_api, log_ws
 
 # --------------------------------------------------------------------------
 # 중앙 설정 (CONFIG)
 # --------------------------------------------------------------------------
 CONFIG = {
-
     'input': {'camera_index': 0, 'mock_mode': False},
     'detector': {'person_detector': {'model_path': 'yolov8n.pt'}, 'pose_detector': {'pose_model_path': 'yolov8n-pose.pt'}},
     'control': {'mock_mode': True},
@@ -58,45 +53,62 @@ async def lifespan(app: FastAPI):
     logger.info("FastAPI 서버 시작 프로세스를 개시합니다...")
     app.state.loop = asyncio.get_running_loop()
 
-    # 1. Firestore DB 초기화
-    cred_path = CONFIG['service']['firebase_credential_path']
+    # 1. 시스템의 논리적 상태를 관리할 중앙 관리자 인스턴스화
+    app.state.state_manager = SystemStateManager()
+    logger.success("SystemStateManager 초기화 완료.")
+
+    # 2. Firestore DB 초기화 (에뮬레이터 감지 로직 개선)
     try:
-        if not os.path.exists(cred_path):
-            raise FileNotFoundError(f"Firebase 인증서 파일을 찾을 수 없습니다: {cred_path}")
-        cred = credentials.Certificate(cred_path)
-        firebase_admin.initialize_app(cred)
-        app.state.db = firestore.client()
-        logger.success("Firestore가 성공적으로 초기화되었습니다.")
+        # FIRESTORE_EMULATOR_HOST 환경 변수가 설정되어 있으면 에뮬레이터를 사용
+        if os.environ.get("FIRESTORE_EMULATOR_HOST"):
+            logger.warning("FIRESTORE_EMULATOR_HOST 환경 변수 감지. Firestore 에뮬레이터를 사용합니다.")
+            # 에뮬레이터 사용 시에는 익명 인증서와 더미 프로젝트 ID를 사용
+            cred = credentials.AnonymousCredentials()
+            firebase_admin.initialize_app(
+                credential=cred,
+                options={"projectId": "smart-safety-system-emul"} # 아무 프로젝트 ID나 상관없음
+            )
+            app.state.db = firestore.client()
+            logger.info("Firestore 에뮬레이터에 연결되었습니다.")
+        else:
+            logger.info("실제 Firestore DB에 연결합니다.")
+            cred_path = CONFIG['service']['firebase_credential_path']
+            if not os.path.exists(cred_path):
+                raise FileNotFoundError(f"Firebase 인증서 파일을 찾을 수 없습니다: {cred_path}")
+            cred = credentials.Certificate(cred_path)
+            # 프로젝트 ID는 인증서 파일에서 자동으로 읽어오므로, 별도로 지정할 필요가 없습니다.
+            firebase_admin.initialize_app(cred)
+            app.state.db = firestore.client()
+        
+        logger.success("Firestore 클라이언트가 성공적으로 생성되었습니다.")
+
     except Exception as e:
         logger.critical(f"Firestore 초기화 실패: {e}.")
         app.state.db = None
 
-    # 2. 핵심 서비스 및 모듈 인스턴스화
+    # 3. 핵심 서비스 및 Facade 인스턴스화
     if app.state.db:
         db_client = app.state.db
         
-        # DBService는 이제 이벤트 루프(loop)를 필요로 함
-        db_service = DBService(db=db_client, loop=app.state.loop)
+        # 서비스 계층 초기화 및 app.state에 등록
+        app.state.db_service = DBService(db=db_client, loop=app.state.loop)
+        app.state.alert_service = AlertService()
         zone_service = ZoneService(db=db_client)
-        alert_service = AlertService() # AlertService 인스턴스화
         
-        # ServiceFacade는 이제 alert_service도 관리
-        service_facade = ServiceFacade(db_service=db_service, alert_service=alert_service)
+        # 제어 계층 Facade 초기화
+        app.state.control_facade = ControlFacade(mock_mode=CONFIG['control']['mock_mode'])
+        logger.success("ControlFacade 초기화 완료.")
+
+        # 탐지 및 로직 계층 Facade 초기화
+        app.state.detector = Detector(config=CONFIG.get('detector', {}), zone_service=zone_service)
+        app.state.logic_facade = LogicFacade(config=CONFIG)
         
-        detector = Detector(config=CONFIG.get('detector', {}), zone_service=zone_service)
-        logic_facade = LogicFacade(config=CONFIG, service_facade=service_facade)
-        
-        # app.state에 인스턴스 저장하여 전역 공유
-        app.state.db_service = db_service # 명시적으로 저장
-        app.state.service_facade = service_facade
-        app.state.detector = detector
-        app.state.logic_facade = logic_facade
         logger.success("핵심 서비스 및 로직 모듈 초기화 완료.")
 
-        # 3. 백그라운드 워커 스레드 시작
+        # 4. 백그라운드 워커 스레드 시작
         worker_thread = threading.Thread(
             target=run_safety_system,
-            args=(CONFIG, service_facade, detector, logic_facade, app.state.loop),
+            args=(app,),
             daemon=True
         )
         worker_thread.start()
@@ -116,7 +128,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Smart Safety System API",
     description="컨베이어 작업 현장 스마트 안전 시스템 API",
-    version="1.1.0", # 버전 업데이트
+    version="2.0.0", # 아키텍처 변경으로 메이저 버전 업데이트
     lifespan=lifespan
 )
 
@@ -131,13 +143,12 @@ app.add_middleware(
 # --------------------------------------------------------------------------
 # API 라우터 등록
 # --------------------------------------------------------------------------
-app.include_router(log_api_router) # /api/logs
-app.include_router(streaming_router, prefix="/api", tags=["Video Streaming"])
-app.include_router(control_router) # /api/control
-app.include_router(zone_router) # /api/zones
-# WebSocket 라우터들
-app.include_router(websocket_router, tags=["WebSocket (Alerts)"]) # /ws/alerts
-app.include_router(log_stream_router, tags=["WebSocket (Log Stream)"]) # /ws/logs
+app.include_router(control_api.router, prefix="/api/control", tags=["System Control"])
+app.include_router(log_api.router, prefix="/api/logs", tags=["Log Data"])
+app.include_router(zone_api.router, prefix="/api/zones", tags=["Danger Zones"])
+app.include_router(streaming.router, prefix="/api/streaming", tags=["Video Streaming"])
+app.include_router(alert_ws.router, prefix="/ws", tags=["WebSocket (Alerts)"])
+app.include_router(log_ws.router, prefix="/ws", tags=["WebSocket (Log Stream)"])
 
 # --------------------------------------------------------------------------
 # 기본 및 상태 확인 라우트
@@ -146,12 +157,16 @@ app.include_router(log_stream_router, tags=["WebSocket (Log Stream)"]) # /ws/log
 def read_root():
     return {"status": "Smart Safety System API is running"}
 
-@app.get("/status", summary="시스템 서비스 상태 조회", tags=["Status"], response_model=SystemStatusResponse)
-def get_system_status(request: Request):
-    db_service = request.app.state.db_service
+@app.get("/status", summary="시스템 전체 상태 조회", tags=["Status"])
+def get_overall_status(request: Request):
+    """시스템의 논리적, 물리적, 서비스 상태를 종합하여 반환합니다."""
+    state_manager = request.app.state.state_manager
+    control_facade = request.app.state.control_facade
     worker = request.app.state.worker_thread
+
     status = {
-        "database_service": db_service.get_status() if db_service else {"status": "disconnected", "reason": "DB service not initialized."},
-        "background_worker_alive": worker.is_alive() if worker else False
+        "logical_status": state_manager.get_status(),
+        "physical_status": control_facade.get_power_status(),
+        "background_worker_alive": worker.is_alive() if worker else False,
     }
     return status
