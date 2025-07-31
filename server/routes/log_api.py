@@ -7,7 +7,6 @@ from server.services.db_service import DBService
 from server.models.websockets import LogMessage # 로그 메시지 모델 임포트
 
 router = APIRouter(
-    prefix="/api/logs",
     tags=["Logs (HTTP)"]
 )
 

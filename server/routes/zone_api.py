@@ -7,7 +7,6 @@ from ..dependencies import get_zone_service
 from ..models.zone import DangerZone, DangerZoneCreate, DangerZoneBase, ZoneResponse, Point
 
 router = APIRouter(
-    prefix="/api/zones",
     tags=["위험 구역 (Danger Zones)"]
 )
 

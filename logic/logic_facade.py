@@ -2,18 +2,16 @@ from typing import Dict, Any, List
 from loguru import logger
 
 from .risk_evaluator import RiskEvaluator
-from .mode_manager import ModeManager
 from .rule_engine import RuleEngine
 # ControlFacade는 더 이상 LogicFacade에서 직접 사용하지 않습니다.
-# from control.control_facade import ControlFacade 
-from server.service_facade import ServiceFacade
+# from control.control_facade import ControlFacade
 
 class LogicFacade:
     """
     Logic Layer의 모든 구성 요소를 통합하여 단순화된 인터페이스를 제공하는 퍼사드 클래스.
     """
 
-    def __init__(self, config: Dict = None, service_facade: ServiceFacade = None):
+    def __init__(self, config: Dict = None):
         """
         LogicFacade를 초기화하고 하위 모듈들을 생성합니다.
         
@@ -23,12 +21,12 @@ class LogicFacade:
         """
         config = config or {}
         self.risk_evaluator = RiskEvaluator(config.get("risk_evaluator"))
-        self.mode_manager = ModeManager(config.get("mode_manager"))
         self.rule_engine = RuleEngine(config.get("rule_engine"))
         
         # ControlFacade는 더 이상 LogicFacade에서 초기화하거나 사용하지 않습니다.
         # control_config = config.get("control", {})
         # self.control_facade = ControlFacade(service_facade=service_facade, **control_config)
+        # Mode manager 사용하지 않습니다.
         
         self.last_risk_analysis = None # 마지막 위험 분석 결과를 저장
         

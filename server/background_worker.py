@@ -41,7 +41,7 @@ def run_safety_system(app: FastAPI):
         control_facade = app.state.control_facade
         detector = app.state.detector
         db_service = app.state.db_service
-        alert_service = app.state.alert_service
+        websocket_service = app.state.websocket_service
         loop = app.state.loop
     except AttributeError as e:
         logger.critical(f"app.state에서 객체를 가져오는 데 실패했습니다: {e}. Lifespan 초기화가 실패했을 수 있습니다.")
@@ -76,9 +76,11 @@ def run_safety_system(app: FastAPI):
 
             # 2. 시스템 활성화 상태일 때만 안전 로직 및 시각화 수행
             if state_manager.is_active():
+                # StateManager를 통해 논리적/물리적 상태를 한 번에 가져옵니다.
+                current_status = state_manager.get_status()
+                current_mode = current_status.get("operation_mode")
+                conveyor_is_on = current_status.get("conveyor_is_on", False)
                 sensor_data = input_data['sensor_data']
-                current_mode = state_manager.get_mode()
-                conveyor_status = control_facade.get_power_status()['conveyor_is_on']
 
                 # 객체 탐지
                 detection_result = detector.detect(raw_frame)
@@ -88,28 +90,49 @@ def run_safety_system(app: FastAPI):
                     detection_result=detection_result,
                     sensor_data=sensor_data,
                     current_mode=current_mode,
-                    current_conveyor_status=conveyor_status
+                    current_conveyor_status=conveyor_is_on
                 )
 
                 # 액션 실행 (조정자가 실행 분배)
                 control_actions = []
                 for action in actions:
                     action_type = action.get("type")
-                    if action_type in ['POWER_ON', 'POWER_OFF', 'REDUCE_SPEED_50']:
+                    if action_type in ['POWER_ON', 'POWER_OFF', 'REDUCE_SPEED_50', 'RESUME_FULL_SPEED'] or action_type.startswith('TRIGGER_ALARM_'):
                         control_actions.append(action)
                     
                     elif action_type and action_type.startswith('LOG_'):
+                        risk_factors = logic_facade.last_risk_analysis.get("risk_factors", [])
+                        
+                        # 로그 레벨과 설명을 결정
+                        log_risk_level = "INFO"  # 기본값
+                        description = "System is operating normally."
+
+                        # 가장 중요한 위험 사실 하나를 찾아 설명과 레벨을 설정
+                        if any(f["type"] == "POSTURE_FALLING" for f in risk_factors):
+                            log_risk_level = "CRITICAL"
+                            description = "A person falling has been detected."
+                        elif any(f["type"] == "SENSOR_ALERT" for f in risk_factors):
+                            log_risk_level = "CRITICAL"
+                            sensor_type = next((f.get("sensor_type") for f in risk_factors if f["type"] == "SENSOR_ALERT"), "unknown")
+                            description = f"An emergency signal from sensor '{sensor_type}' has been detected."
+                        elif any(f["type"] == "ZONE_INTRUSION" for f in risk_factors):
+                            log_risk_level = "WARNING"
+                            intrusion_details = next((f.get("details") for f in risk_factors if f["type"] == "ZONE_INTRUSION"), [])
+                            zone_names = ", ".join(list(set(alert["zone_name"] for alert in intrusion_details)))
+                            description = f"Person detected in danger zone(s): {zone_names}."
+                        elif any(f["type"] == "POSTURE_CROUCHING" for f in risk_factors):
+                            log_risk_level = "NOTICE"
+                            description = "A person in a crouching pose has been detected."
+
                         event_data = {
                             "event_type": action_type,
-                            "details": action.get("details", {}),
-                            "risk_level": logic_facade.last_risk_analysis.get("risk_level", "N/A")
+                            "details": {"description": description},
+                            "log_risk_level": log_risk_level
                         }
-                        # DB 로깅은 비동기일 수 있으므로 스레드-세이프하게 호출
                         db_service.log_event(event_data)
                     
                     elif action_type == 'NOTIFY_UI':
-                        # UI 알림은 비동기 함수이므로, 스레드 안전하게 이벤트 루프를 통해 실행
-                        coro = alert_service.connection_manager.broadcast(action.get("details", {}))
+                        coro = websocket_service.broadcast_to_channel('alerts', action.get("details", {}))
                         asyncio.run_coroutine_threadsafe(coro, loop)
 
                 if control_actions:
@@ -118,14 +141,28 @@ def run_safety_system(app: FastAPI):
                 # 시각화 및 스트리밍 프레임 업데이트
                 display_frame = detector.draw_detections(raw_frame, detection_result)
                 
-                mode_text = f"Mode: {current_mode}"
-                final_conveyor_status = control_facade.get_power_status()['conveyor_is_on']
-                status_text = "Status: RUNNING" if final_conveyor_status else "Status: STOPPED"
-                risk_level = logic_facade.last_risk_analysis.get("risk_level", "N/A")
+                # 최종 상태를 다시 가져와서 화면에 표시
+                final_status = state_manager.get_status()
+                mode_text = f"Mode: {final_status.get('operation_mode', 'N/A')}"
+                
+                # 속도와 전원 상태를 조합하여 더 상세한 상태 텍스트 생성
+                is_on = final_status.get('conveyor_is_on', False)
+                speed = final_status.get('conveyor_speed', 100)
+                
+                if not is_on:
+                    status_text = "Status: STOPPED"
+                elif speed < 100:
+                    status_text = f"Status: SLOWDOWN ({speed}%)"
+                else:
+                    status_text = "Status: RUNNING"
+                
+                risk_factors = logic_facade.last_risk_analysis.get("risk_factors", [])
+                risk_text = "Risk: DETECTED" if risk_factors else "Risk: SAFE"
+                risk_color = (0, 0, 255) if risk_factors else (0, 255, 0)
 
                 cv2.putText(display_frame, mode_text, (15, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
                 cv2.putText(display_frame, status_text, (15, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
-                cv2.putText(display_frame, f"Risk: {risk_level.upper()}", (15, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 165, 255), 2)
+                cv2.putText(display_frame, risk_text, (15, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, risk_color, 2)
             
             else:
                 # 시스템이 비활성화 상태일 때 대기하며 화면에 상태 표시
