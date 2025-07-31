@@ -3,7 +3,7 @@ import './Dashboard.css';
 
 export default function LiveStreamContent() {
   
-  const videoStreamUrl = "http://localhost:8000/api/video_feed";
+  const videoStreamUrl = "http://localhost:8000/api/streaming/video_feed";
 
   return (
     <div className="live-stream-container">

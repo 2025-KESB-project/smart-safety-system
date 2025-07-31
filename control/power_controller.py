@@ -5,6 +5,7 @@ class PowerController:
     """
     컨베이어의 물리적 전원 상태(On/Off)를 관리하는 클래스.
     자신의 상태(self.is_on)를 직접 소유하고 제어합니다.
+
     """
     def __init__(self, mock_mode: bool = True):
         """

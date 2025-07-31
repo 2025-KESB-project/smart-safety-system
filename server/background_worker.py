@@ -109,7 +109,7 @@ def run_safety_system(app: FastAPI):
                     
                     elif action_type == 'NOTIFY_UI':
                         # UI 알림은 비동기 함수이므로, 스레드 안전하게 이벤트 루프를 통해 실행
-                        coro = alert_service.broadcast(action.get("details", {}))
+                        coro = alert_service.connection_manager.broadcast(action.get("details", {}))
                         asyncio.run_coroutine_threadsafe(coro, loop)
 
                 if control_actions:

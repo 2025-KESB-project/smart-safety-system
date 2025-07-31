@@ -76,11 +76,8 @@ async def lifespan(app: FastAPI):
             if not os.path.exists(cred_path):
                 raise FileNotFoundError(f"Firebase 인증서 파일을 찾을 수 없습니다: {cred_path}")
             cred = credentials.Certificate(cred_path)
-            # 실제 DB 연결 시에는 프로젝트 ID를 명시하는 것이 좋음
-            firebase_admin.initialize_app(
-                credential=cred,
-                options={"projectId": "capstone-design-428609"}
-            )
+            # 프로젝트 ID는 인증서 파일에서 자동으로 읽어오므로, 별도로 지정할 필요가 없습니다.
+            firebase_admin.initialize_app(cred)
             app.state.db = firestore.client()
         
         logger.success("Firestore 클라이언트가 성공적으로 생성되었습니다.")
