@@ -52,15 +52,20 @@ async def lifespan(app: FastAPI):
     logger.info("FastAPI 서버 시작 프로세스를 개시합니다...")
     app.state.loop = asyncio.get_running_loop()
 
-    # 1. Firestore DB 초기화 (에뮬레이터 감지 로직 개선)
+    # 1. 시스템의 논리적 상태를 관리할 중앙 관리자 인스턴스화
+    app.state.state_manager = SystemStateManager()
+    logger.success("SystemStateManager 초기화 완료.")
+
+    # 2. Firestore DB 초기화 (에뮬레이터 감지 로직 개선)
     try:
         # FIRESTORE_EMULATOR_HOST 환경 변수가 설정되어 있으면 에뮬레이터를 사용
         if os.environ.get("FIRESTORE_EMULATOR_HOST"):
             logger.warning("FIRESTORE_EMULATOR_HOST 환경 변수 감지. Firestore 에뮬레이터를 사용합니다.")
+            # 에뮬레이터 사용 시에는 익명 인증서와 더미 프로젝트 ID를 사용
             cred = credentials.AnonymousCredentials()
             firebase_admin.initialize_app(
                 credential=cred,
-                options={"projectId": "smart-safety-system-emul"}
+                options={"projectId": "smart-safety-system-emul"} # 아무 프로젝트 ID나 상관없음
             )
             app.state.db = firestore.client()
             logger.info("Firestore 에뮬레이터에 연결되었습니다.")
@@ -70,6 +75,7 @@ async def lifespan(app: FastAPI):
             if not os.path.exists(cred_path):
                 raise FileNotFoundError(f"Firebase 인증서 파일을 찾을 수 없습니다: {cred_path}")
             cred = credentials.Certificate(cred_path)
+            # 프로젝트 ID는 인증서 파일에서 자동으로 읽어오므로, 별도로 지정할 필요가 없습니다.
             firebase_admin.initialize_app(cred)
             app.state.db = firestore.client()
         
@@ -79,28 +85,24 @@ async def lifespan(app: FastAPI):
         logger.critical(f"Firestore 초기화 실패: {e}.")
         app.state.db = None
 
-    # 2. 핵심 서비스 및 Facade 인스턴스화
+    # 3. 핵심 서비스 및 Facade 인스턴스화
     if app.state.db:
         db_client = app.state.db
         
-        # 제어 계층 Facade를 먼저 생성합니다.
-        app.state.control_facade = ControlFacade(mock_mode=CONFIG['control']['mock_mode'])
-        logger.success("ControlFacade 초기화 완료.")
-
-        # ControlFacade를 SystemStateManager에 주입하여 생성합니다.
-        app.state.state_manager = SystemStateManager(control_facade=app.state.control_facade)
-        logger.success("SystemStateManager 초기화 완료.")
-
-        # 나머지 서비스들을 생성합니다.
+        # 서비스 계층 초기화 및 app.state에 등록
         app.state.websocket_service = WebSocketService()
         app.state.db_service = DBService(db=db_client, loop=app.state.loop, websocket_service=app.state.websocket_service)
         zone_service = ZoneService(db=db_client)
         
-        # 나머지 Facade들을 생성합니다.
+        # 제어 계층 Facade 초기화
+        app.state.control_facade = ControlFacade(mock_mode=CONFIG['control']['mock_mode'])
+        logger.success("ControlFacade 초기화 완료.")
+
+        # 탐지 및 로직 계층 Facade 초기화
         app.state.detector = Detector(config=CONFIG.get('detector', {}), zone_service=zone_service)
         app.state.logic_facade = LogicFacade(config=CONFIG)
         
-        logger.success("모든 서비스 및 로직 모듈 초기화 완료.")
+        logger.success("핵심 서비스 및 로직 모듈 초기화 완료.")
 
         # 4. 백그라운드 워커를 비동기 태스크로 시작
         worker_task = asyncio.create_task(run_safety_system(app))
