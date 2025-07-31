@@ -58,7 +58,7 @@ def run_safety_system(app: FastAPI):
     logger.info("안전 초기화: 컨베이어 전원을 OFF 상태로 시작합니다.")
     control_facade.execute_actions([{"type": "POWER_OFF"}])
     db_service.log_event({
-        "event_type": "LOG_SYSTEM_INITIALIZED", 
+        "event_type": "LOG_SYSTEM_INITIALIZED",
         "details": {"message": "System worker started, conveyor forced OFF."}
     })
 
@@ -70,7 +70,7 @@ def run_safety_system(app: FastAPI):
                 logger.warning("입력 스트림으로부터 프레임을 가져올 수 없습니다. 1초 후 재시도...")
                 time.sleep(1)
                 continue
-            
+
             raw_frame = input_data['raw_frame']
             display_frame = raw_frame.copy()
 
@@ -101,7 +101,7 @@ def run_safety_system(app: FastAPI):
                     action_type = action.get("type")
                     if action_type in ['POWER_ON', 'POWER_OFF', 'REDUCE_SPEED_50', 'RESUME_FULL_SPEED'] or action_type.startswith('TRIGGER_ALARM_'):
                         control_actions.append(action)
-                    
+
                     elif action_type and action_type.startswith('LOG_'):
                         risk_factors = logic_facade.last_risk_analysis.get("risk_factors", [])
 
@@ -132,7 +132,7 @@ def run_safety_system(app: FastAPI):
                             "log_risk_level": log_risk_level
                         }
                         db_service.log_event(event_data)
-                    
+
                     elif action_type == 'NOTIFY_UI':
                         coro = websocket_service.broadcast_to_channel('alerts', action.get("details", {}))
                         asyncio.run_coroutine_threadsafe(coro, loop)
@@ -142,7 +142,7 @@ def run_safety_system(app: FastAPI):
 
                 # 시각화 및 스트리밍 프레임 업데이트
                 display_frame = detector.draw_detections(raw_frame, detection_result)
-                
+
                 # 최종 상태를 다시 가져와서 화면에 표시
                 final_status = state_manager.get_status()
                 mode_text = f"Mode: {final_status.get('operation_mode', 'N/A')}"
@@ -165,7 +165,7 @@ def run_safety_system(app: FastAPI):
                 cv2.putText(display_frame, mode_text, (15, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
                 cv2.putText(display_frame, status_text, (15, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
                 cv2.putText(display_frame, risk_text, (15, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, risk_color, 2)
-            
+
             else:
                 # 시스템이 비활성화 상태일 때 대기하며 화면에 상태 표시
                 cv2.putText(display_frame, "SYSTEM INACTIVE", (15, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
