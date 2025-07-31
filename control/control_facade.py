@@ -43,6 +43,8 @@ class ControlFacade:
                 self.power_controller.turn_off(reason)
             elif action_type == "REDUCE_SPEED_50":
                 self.speed_controller.slow_down_50_percent(reason)
+            elif action_type == "RESUME_FULL_SPEED":
+                self.speed_controller.resume_full_speed(reason)
             elif action_type.startswith("TRIGGER_ALARM_"):
                 # "TRIGGER_ALARM_CRITICAL" -> "critical"
                 level_str = action_type.replace("TRIGGER_ALARM_", "").lower()
@@ -61,8 +63,14 @@ class ControlFacade:
 
     def get_all_statuses(self) -> dict:
         """모든 하위 컨트롤러의 상태를 취합하여 반환합니다."""
-        statuses = {}
-        statuses.update(self.power_controller.get_status())
-        statuses.update(self.speed_controller.get_status())
-        statuses.update(self.alert_controller.get_system_status())
+        power_status = self.power_controller.get_status()
+        speed_status = self.speed_controller.get_status()
+        alert_status = self.alert_controller.get_system_status()
+
+        # API 응답 모델(SystemStatusResponse)에 맞게 키 이름을 통일합니다.
+        statuses = {
+            "conveyor_is_on": power_status.get("conveyor_is_on"),
+            "conveyor_speed": speed_status.get("current_speed_percent"),
+            **alert_status # alert_status의 모든 키-값을 추가
+        }
         return statuses

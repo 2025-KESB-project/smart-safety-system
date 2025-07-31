@@ -97,7 +97,7 @@ def run_safety_system(app: FastAPI):
                 control_actions = []
                 for action in actions:
                     action_type = action.get("type")
-                    if action_type in ['POWER_ON', 'POWER_OFF', 'REDUCE_SPEED_50'] or action_type.startswith('TRIGGER_ALARM_'):
+                    if action_type in ['POWER_ON', 'POWER_OFF', 'REDUCE_SPEED_50', 'RESUME_FULL_SPEED'] or action_type.startswith('TRIGGER_ALARM_'):
                         control_actions.append(action)
                     
                     elif action_type and action_type.startswith('LOG_'):
@@ -144,7 +144,17 @@ def run_safety_system(app: FastAPI):
                 # 최종 상태를 다시 가져와서 화면에 표시
                 final_status = state_manager.get_status()
                 mode_text = f"Mode: {final_status.get('operation_mode', 'N/A')}"
-                status_text = "Status: RUNNING" if final_status.get('conveyor_is_on') else "Status: STOPPED"
+                
+                # 속도와 전원 상태를 조합하여 더 상세한 상태 텍스트 생성
+                is_on = final_status.get('conveyor_is_on', False)
+                speed = final_status.get('conveyor_speed', 100)
+                
+                if not is_on:
+                    status_text = "Status: STOPPED"
+                elif speed < 100:
+                    status_text = f"Status: SLOWDOWN ({speed}%)"
+                else:
+                    status_text = "Status: RUNNING"
                 
                 risk_factors = logic_facade.last_risk_analysis.get("risk_factors", [])
                 risk_text = "Risk: DETECTED" if risk_factors else "Risk: SAFE"
