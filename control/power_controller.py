@@ -1,177 +1,79 @@
 from loguru import logger
-import time
-import threading
-from typing import Dict, Optional, Callable, List
-from enum import Enum
+from typing import Optional
 
-class PowerState(Enum):
-    """전원 상태"""
-    ON = "on"
-    OFF = "off"
-    EMERGENCY_OFF = "emergency_off"
-    MAINTENANCE = "maintenance"
+# from control.speed_controller import SpeedController
+from control.serial_communicator import SerialCommunicator
+
 
 class PowerController:
-    """전원 제어 시스템 (GPIO 로직 제거 버전)"""
-    
-    def __init__(self, mock_mode: bool = True, **kwargs):
-        # 라즈베리파이를 사용하지 않으므로, 항상 모의 모드처럼 동작하거나
-        # 아두이노를 통한 전원 제어 로직을 여기에 추가할 수 있습니다.
-        # 현재는 상태 관리와 로깅에만 집중합니다.
-        self.mock_mode = True # 하드웨어 제어 로직이 없으므로 항상 True
-        self.current_state = PowerState.OFF
-        self._lock = threading.Lock()
-        self.state_history: List[Dict] = []
-        self.max_history_size = 100
-        logger.info(f"전원 제어기 초기화 완료 (상태 관리 전용 모드)")
+    """
+    릴레이 모듈을 직접 제어하여 시스템의 주 전원을 ON/OFF합니다.
+    SerialCommunicator를 통해 아두이노에 'p1'(ON) 또는 'p0'(OFF) 명령을 전송합니다.
+    """
 
-    def prevent_power_on(self, reason: str = "Safety interlock: Person in danger zone") -> bool:
-        with self._lock:
-            logger.info(f"[PowerController] 전원 켜짐 방지: {reason}")
-            if self.current_state == PowerState.ON:
-                return self._set_state_unsafe(PowerState.OFF, reason)
-            return True
+    def __init__(self, communicator: SerialCommunicator, mock_mode: bool = True):
+        self.communicator = communicator
+        self.mock_mode = mock_mode
+        self._is_power_on = False  # 실제 전원 상태 (릴레이 상태)
+        logger.info(f"전원 제어기 초기화 완료. SerialCommunicator 사용. 모의 모드: {self.mock_mode}")
 
-    def allow_power_on(self, reason: str = "Safety interlock released: Danger zone clear") -> bool:
-        with self._lock:
-            if self.current_state != PowerState.EMERGENCY_OFF:
-                return self._set_state_unsafe(PowerState.ON, reason)
-            else:
-                logger.warning("비상 정지 상태에서는 전원을 켤 수 없습니다. 리셋이 필요합니다.")
-                return False
+    def power_on(self, reason: str = "System start"):
+        """
+        릴레이를 켜서 컨베이어 시스템에 전원을 공급합니다.
+        """
+        if not self._is_power_on:
+            logger.success(f"전원 공급 시작. 이유: {reason}")
+            self.communicator.send_command("p1")
+            self._is_power_on = True
+        else:
+            logger.info("이미 전원이 공급된 상태입니다.")
 
-    def stop_power(self, reason: str = "Critical risk detected: Immediate shutdown") -> bool:
-        return self.emergency_off(reason)
+    def power_off(self, reason: str = "System stop"):
+        """
+        릴레이를 꺼서 컨베이어 시스템의 전원을 차단합니다. (LOTO)
+        """
+        if self._is_power_on:
+            logger.warning(f"전원 공급 차단. 이유: {reason}")
+            self.communicator.send_command("p0")
+            self._is_power_on = False
+        else:
+            logger.info("이미 전원이 차단된 상태입니다.")
 
-    def emergency_off(self, reason: str = "비상 정지") -> bool:
-        with self._lock:
-            return self._set_state_unsafe(PowerState.EMERGENCY_OFF, reason)
+    # 기존 메소드 이름 호환성을 위해 유지
+    def prevent_power_on(self, reason: str = "Safety interlock: Person in danger zone"):
+        """LOTO의 핵심 로직. 전원을 차단합니다."""
+        self.power_off(reason)
 
-    def _set_state_unsafe(self, new_state: PowerState, reason: str) -> bool:
-        if self.current_state == new_state:
-            return False
-        
-        previous_state = self.current_state
-        self.current_state = new_state
-        
-        logger.info(f"전원 상태 변경: {previous_state.value} -> {new_state.value} (이유: {reason})")
-        return True
+    def allow_power_on(self, reason: str = "Safety interlock released: Danger zone clear"):
+        """
+        전원 투입을 허용합니다.
+        실제로 전원을 켜지는 않고, 다음 `power_on` 명령이 실행될 수 있도록 상태를 준비합니다.
+        (현재 구현에서는 별도 로직이 필요 없지만, 개념적으로 분리)
+        """
+        logger.info(f"전원 투입 '허용' 상태로 변경. 이유: {reason}")
+        # self.power_on()을 여기서 호출하지 않음에 유의.
+        # 제어는 상위 로직 (API 등)에서 명시적으로 이루어져야 함.
 
-    def _emergency_shutdown(self):
-        logger.critical("비상 정지 절차 실행 중...")
-        self._stop_all_motors()
-        self._activate_safety_devices()
-        self._send_emergency_notification()
-        logger.critical("비상 정지 절차 완료")
-
-    def _stop_all_motors(self):
-        logger.info("모든 모터 정지")
-
-    def _activate_safety_devices(self):
-        logger.info("안전 장치 활성화")
-
-    def _send_emergency_notification(self):
-        logger.info("비상 알림 발송")
-
-    def get_current_state(self) -> PowerState:
-        with self._lock:
-            return self.current_state
+    def stop_power(self, reason: str = "Critical risk detected: Immediate shutdown"):
+        """위험 상황 발생 시 전원을 즉시 차단합니다."""
+        logger.critical(f"[EMERGENCY] 전원 즉시 차단! 이유: {reason}")
+        self.power_off(reason=f"EMERGENCY STOP: {reason}")
 
     def is_power_on(self) -> bool:
-        with self._lock:
-            return self.current_state == PowerState.ON
+        """현재 전원이 켜져 있는지 확인합니다."""
+        return self._is_power_on
 
-    def is_emergency_off(self) -> bool:
-        with self._lock:
-            return self.current_state == PowerState.EMERGENCY_OFF
+    def get_status(self) -> dict:
+        """PowerController의 현재 상태를 반환합니다."""
+        return {
+            "is_power_on": self._is_power_on,
+            "mock_mode": self.mock_mode
+        }
 
-    def register_state_change_callback(self, callback: Callable):
-        with self._lock:
-            self.state_change_callbacks.append(callback)
-
-    def _execute_callbacks(self, from_state: PowerState, to_state: PowerState, reason: str):
-        for callback in self.state_change_callbacks:
-            try:
-                callback(from_state, to_state, reason)
-            except Exception as e:
-                logger.error(f"상태 변경 콜백 실행 중 오류: {e}")
-
-    def _add_to_history(self, state_change: Dict):
-        self.state_history.append(state_change)
-        if len(self.state_history) > self.max_history_size:
-            self.state_history.pop(0)
-
-    def get_state_history(self, limit: int = 10) -> list:
-        with self._lock:
-            return self.state_history[-limit:]
-
-    def get_power_statistics(self) -> Dict:
-        with self._lock:
-            stats = {
-                'current_state': self.current_state.value,
-                'total_changes': len(self.state_history),
-                'state_counts': {state.value: 0 for state in PowerState},
-                'last_change_time': None
-            }
-            
-            for change in self.state_history:
-                stats['state_counts'][change['to_state']] += 1
-            
-            if self.state_history:
-                stats['last_change_time'] = self.state_history[-1]['timestamp']
-            
-            return stats
-
-    def auto_control_based_on_risk(self, risk_level: str, mode_config: Dict):
-        with self._lock:
-            auto_stop = mode_config.get('auto_stop', False)
-            
-            if risk_level == 'critical':
-                self.emergency_off("Critical risk detected")
-            elif risk_level == 'high' and auto_stop:
-                self.turn_off("High risk detected")
-            elif risk_level == 'low' and self.current_state == PowerState.OFF:
-                self.turn_on("Safe condition, auto-recovering")
-
-    def start_monitoring(self, interval: float = 1.0):
-        with self._lock:
-            if not self.is_running:
-                self.is_running = True
-                self.monitor_thread = threading.Thread(target=self._monitor_loop, args=(interval,), daemon=True)
-                self.monitor_thread.start()
-                logger.info("전원 상태 모니터링 시작.")
-
-    def _monitor_loop(self, interval: float):
-        while self.is_running:
-            if not self.mock_mode:
-                self._check_power_status()
-            time.sleep(interval)
-
-    def stop_monitoring(self):
-        with self._lock:
-            if self.is_running:
-                self.is_running = False
-        if self.monitor_thread:
-            self.monitor_thread.join()
-            logger.info("전원 상태 모니터링 중지.")
-
-    def _check_power_status(self):
-        try:
-            import RPi.GPIO as GPIO
-            with self._lock:
-                current_gpio_state = GPIO.input(self.gpio_pin)
-                expected_gpio_state = GPIO.HIGH if self.current_state == PowerState.ON else GPIO.LOW
-                if current_gpio_state != expected_gpio_state:
-                    logger.warning(f"GPIO 상태 불일치 감지: 예상={expected_gpio_state}, 실제={current_gpio_state}")
-        except Exception as e:
-            logger.error(f"전원 상태 확인 중 오류: {e}")
-
-    def get_system_status(self) -> Dict:
-        with self._lock:
-            return {
-                'current_state': self.current_state.value,
-                'gpio_pin': self.gpio_pin,
-                'mock_mode': self.mock_mode,
-                'is_running': self.is_running,
-                'history_size': len(self.state_history)
-            }
+    def release(self):
+        """
+        PowerController의 자원을 해제합니다.
+        시스템 종료 시 안전을 위해 전원을 차단합니다.
+        """
+        logger.info("PowerController 자원 해제. 안전을 위해 전원을 차단합니다.")
+        self.power_off("System shutdown")
