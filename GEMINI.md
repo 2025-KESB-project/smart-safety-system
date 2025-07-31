@@ -86,3 +86,41 @@
 
 - **현재:** 모든 디버깅이 완료되었으며, 시스템은 의도한 대로 작동할 준비가 되었다. 서버 시작 시 모터가 100%로 회전하고, 넘어짐 감지 시 즉시 정지하는 핵심 기능이 모두 구현되었다.
 - **다음 단계:** 실제 현장과 유사한 환경에서 다양한 시나리오(여러 명 등장, 조명 변화 등)를 테스트하여 시스템의 안정성과 강건성을 검증해야 한다.
+
+---
+
+### 💬 Gemini와의 대화 기록 (2025년 7월 31일 - 최신 업데이트)
+
+#### 1. `PowerController` 리팩토링 및 릴레이 제어 도입
+- **요청:** `PowerController`가 `SpeedController`에 의존하지 않고, 릴레이 모듈을 직접 제어하도록 변경 요청.
+- **조치:**
+    - **아두이노 코드 (`safesystem-new.ino`) 수정:**
+        - 릴레이 제어용 `RELAY_PIN` (디지털 10번) 추가.
+        - 전원 ON/OFF를 위한 새로운 시리얼 명령어 `p1`(ON), `p0`(OFF) 처리 로직 추가.
+    - **`control/serial_communicator.py` 신규 생성:**
+        - `SpeedController`와 `PowerController`가 시리얼 포트를 공유하며 발생하는 충돌을 막기 위해, 시리얼 통신을 전담하는 `SerialCommunicator` 클래스 생성.
+    - **`control/power_controller.py` 수정:**
+        - `SpeedController` 의존성 제거.
+        - `SerialCommunicator`를 주입받아 `p1`/`p0` 명령을 직접 전송하도록 변경.
+        - 릴레이 제어와 관련된 명확한 로그 추가.
+    - **`control/speed_controller.py` 수정:**
+        - 시리얼 포트 직접 관리 로직 제거.
+        - `SerialCommunicator`를 주입받아 속도 제어(`s` 명령어)만 담당하도록 변경.
+    - **`control/control_facade.py` 수정:**
+        - `SerialCommunicator`의 단일 인스턴스를 생성하여 `PowerController`와 `SpeedController`에 공유/주입하도록 아키텍처 변경.
+        - `STOP_POWER` 액션이 `power_controller.power_off()`를 호출하도록 수정.
+
+#### 2. 통합 테스트 (`test_struct.py`) 개선 및 오류 해결
+- **문제 1:** `ControlFacade` 및 `LogicFacade`의 `__init__` 및 `process` 메소드 시그니처 변경으로 인해 테스트 코드에서 `TypeError` 발생.
+- **해결 1:** `test_struct.py`에서 `ControlFacade` 초기화 방식 및 `logic_facade.process()` 호출 인자를 최신 코드에 맞게 수정.
+- **문제 2:** 기존 테스트가 `HIGH` 위험(단순 침입)만 검증하고, `CRITICAL` 위험(넘어짐)에 대한 검증이 누락됨.
+- **해결 2:** `test_struct.py`에 `CRITICAL` 위험 상황에 대한 테스트 로직 추가.
+    - 메인 루프에서 `STOP_POWER` 액션이 감지되는지 확인.
+    - 감지 시, 테스트 성공 로그를 출력하고 자동으로 테스트를 종료하도록 하여 `PowerController`를 통한 전원 차단 흐름을 명시적으로 검증.
+
+#### 3. 백그라운드 워커 (`background_worker.py`) 오류 해결
+- **문제:** 운전 모드 시작 시 `AttributeError: 'ControlFacade' object has no attribute 'get_power_status'` 발생.
+- **원인 분석:** `background_worker`가 과거에 사용되던 `get_power_status()` 메소드를 호출하려 했으나, 리팩토링 과정에서 해당 메소드가 사라짐.
+- **해결:**
+    - `control/control_facade.py`: `power_controller.get_status()`를 호출하여 결과를 반환하는 `get_power_status()` 메소드를 다시 추가하여 하위 호환성 확보.
+    - `server/background_worker.py`: `get_power_status()`가 반환하는 딕셔너리의 키를 `'conveyor_is_on'`에서 현재 `PowerController`가 사용하는 올바른 키인 `'is_power_on'`으로 수정.
