@@ -84,6 +84,8 @@ def run_safety_system(app: FastAPI):
 
                 # 객체 탐지
                 detection_result = detector.detect(raw_frame)
+                # 최신 탐지 결과를 앱 상태에 저장하여 API 등 다른 곳에서 접근할 수 있도록 함
+                app.state.latest_detection_result = detection_result
 
                 # 로직 처리 (두뇌에게 판단 요청)
                 actions = logic_facade.process(
