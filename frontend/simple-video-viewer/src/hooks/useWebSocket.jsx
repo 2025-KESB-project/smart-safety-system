@@ -1,5 +1,5 @@
 // src/hooks/useWebSocket.js
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * WebSocket 연결을 관리하고, 메시지를 수신하면 onMessage 콜백을 호출합니다.
@@ -8,23 +8,36 @@ import { useEffect, useRef } from 'react';
  * @param {(msg: any) => void} onMessage 수신한 메시지를 처리할 콜백
  * @param {string|string[]} [protocols] 프로토콜 (선택)
  * @param {number} [reconnectInterval=3000] 재접속 시도 간격 (ms)
+ * @param {number} [maxRetries=3] 최대 재접속 시도 횟수
  */
 export function useWebSocket(
   url,
   onMessage,
   protocols,
-  reconnectInterval = 3000
+  reconnectInterval = 5000,
+  maxRetries = 3
+  //5초당 재접속 시도, 최대 3회
 ) {
-  const wsRef = useRef(null);
-  const reconnectTimerRef = useRef(null);
+  const wsRef          = useRef(null);
+  const reconnectTimer = useRef(null);
+  const retryCount     = useRef(0);  // 재접속 시도 횟수를 추적하는 변수
+  const shouldReconnect = useRef(true); // 재접속 여부를 제어하는 플래그
+  //상태-에러 관리용 state
+  const [status, setStatus] = useState('connecting'); // 연결 상태를 추적하는 상태 변수
+  const [error, setError] = useState(null); // 오류 상태를 추적하는 상태 변수
 
   useEffect(() => {
+    shouldReconnect.current = true; // 컴포넌트가 마운트될 시 활성화
+
     function connect() {
+      if (!shouldReconnect.current) return; // 재접속이 비활성화된 경우 연결하지 않음
       const ws = new WebSocket(url, protocols || []);
       wsRef.current = ws;
 
       ws.onopen = () => {
         console.log('[WS] Connected to', url);
+        // 연결 성공 시 재시도 카운트 초기화
+        retryCount.current = 0;
       };
 
       ws.onmessage = (event) => {
@@ -37,17 +50,23 @@ export function useWebSocket(
       };
 
       ws.onclose = (e) => {
-        console.warn(
-          '[WS] Disconnected, retrying in',
-          reconnectInterval,
-          'ms',
-          e.reason
-        );
-        reconnectTimerRef.current = window.setTimeout(connect, reconnectInterval);
-      };
+        if (!shouldReconnect.current) return; // 재접속이 비활성화된 경우 연결 종료
+        if (retryCount.current < maxRetries) {
+          retryCount.current += 1;
+          console.warn(
+            `[WS] Disconnected (reason: ${e.reason}), retry ${retryCount.current}/${maxRetries} in ${reconnectInterval}ms`
+          );
+          reconnectTimer.current = setTimeout(connect, reconnectInterval);
+        } else {
+          console.error(
+            `[WS] Disconnected. Max retries (${maxRetries}) reached. No further reconnects.`
+          );
+        }
+      };// 연결이 닫힐 때마다 재접속 시도, 최대 재접속 횟수 초과 시 중단
 
       ws.onerror = (err) => {
         console.error('[WS] Error', err);
+        // 오류 발생 시 연결 닫기 → onclose 로직 수행
         ws.close();
       };
     }
@@ -55,14 +74,11 @@ export function useWebSocket(
     connect();
 
     return () => {
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      shouldReconnect.current = false; // 컴포넌트 언마운트 시 재접속 비활성화
+      clearTimeout(reconnectTimer.current);
+      if (wsRef.current) wsRef.current.close();
     };
-  }, [url, protocols, reconnectInterval, onMessage]);
+  }, [url, protocols, reconnectInterval, maxRetries, onMessage]);
 
-  return wsRef.current;
+  return { socket: wsRef.current, status, error };
 }
