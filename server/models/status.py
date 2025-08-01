@@ -8,6 +8,11 @@ class ServiceStatus(BaseModel):
     details: str | None = Field(None, description="상태에 대한 추가 정보", examples=["Connected to collection 'event_logs'"])
     reason: str | None = Field(None, description="연결 실패 시 원인", examples=["DB service not initialized."])
 
+class ConfirmationResponse(BaseModel):
+    """2차 확인이 필요할 때의 응답 모델"""
+    confirmation_required: bool = Field(True, description="2차 확인 필요 여부")
+    message: str = Field(..., description="사용자에게 보여줄 확인 메시지")
+
 class SystemStatusResponse(BaseModel):
     """전체 시스템 상태 응답 모델"""
     system_is_active: bool = Field(..., description="시스템의 논리적 활성화 여부")

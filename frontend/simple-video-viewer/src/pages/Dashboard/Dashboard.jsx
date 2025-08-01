@@ -17,7 +17,8 @@ export default function Dashboard() {
   const [activeId,       setActiveId]       = useState(null);
   const [loading,        setLoading]        = useState(false);
   const [error,          setError]          = useState(null);
-  const [isOperating,    setIsOperating]    = useState(null);
+  const [popupError,     setPopupError]     = useState(null);
+  const [operationMode,  setOperationMode]  = useState(null);
 
   // 위험 모드 토글 & 메시지
   const [isDangerMode,   setIsDangerMode]   = useState(false);
@@ -66,17 +67,39 @@ export default function Dashboard() {
 // 3) 최초 마운트 시에만 로딩 표시
   useEffect(() => { fetchLogs(true); }, [fetchLogs]);// 최초 로드 때만 showLoading=true
 
-  const handleControl = async (url) => {
+  const handleControl = async (url, options = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(url, { method: 'POST' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const res = await fetch(url, { method: 'POST', ...options });
+
+      // 202 Accepted: 2차 확인이 필요한 경우
+      if (res.status === 202) {
+        const data = await res.json();
+        if (data.confirmation_required && window.confirm(data.message)) {
+          // 사용자가 확인하면, confirmed=true 파라미터와 함께 다시 요청
+          const confirmedUrl = new URL(url);
+          confirmedUrl.searchParams.append('confirmed', 'true');
+          await handleControl(confirmedUrl.toString(), options);
+        }
+        return; // 2차 확인 흐름이 끝나면 여기서 함수 종료
+      }
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.detail || `HTTP ${res.status}`);
+      }
+
       const data = await res.json();
-      setIsOperating(data.system_is_active);
+      setOperationMode(data.operation_mode);
+
     } catch (e) {
       console.error(e);
-      setError('명령을 실행하는 중 오류가 발생했습니다.');
+      // 기존 setError 대신 새로운 popupError 상태를 사용합니다.
+      const errorMessage = e.message || '명령을 실행하는 중 오류가 발생했습니다.';
+      setPopupError(errorMessage);
+      // 5초 후에 자동으로 팝업을 닫습니다.
+      setTimeout(() => setPopupError(null), 5000);
     } finally {
       setLoading(false);
     }
@@ -154,9 +177,10 @@ export default function Dashboard() {
 
         {/* 우측: 로그 테이블 + 컨트롤 */}
         <div className="right-panel">
-          {loading && logs.length===0 ? (
+          {loading && logs.length === 0 ? (
             <div className="loading">로그 불러오는 중...</div>
           ) : error ? (
+            // 페이지 로드 에러만 여기에 표시
             <div className="error">{error}</div>
           ) : (
             <VideoLogTable
@@ -167,7 +191,7 @@ export default function Dashboard() {
           )}
 
           <ConveyorMode
-            isOperating={isOperating}
+            operationMode={operationMode}
             loading={loading}
             onStartAutomatic={handleStartAutomatic}
             onStartMaintenance={handleStartMaintenance}
@@ -176,6 +200,21 @@ export default function Dashboard() {
           />
         </div>
       </div>
+
+      {/* 에러 팝업 모달 */}
+      {popupError && (
+        <div className="error-popup-overlay">
+          <div className="error-popup">
+            <div className="error-popup-header">
+              <span>⚠️ 작업 실패</span>
+              <button onClick={() => setPopupError(null)}>&times;</button>
+            </div>
+            <div className="error-popup-content">
+              {popupError}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 로그아웃 모달 */}
       {showLogoutModal && (
