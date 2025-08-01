@@ -61,7 +61,12 @@ class PoseDetector:
                     fall_bboxes.append(box.xyxy[0].cpu().numpy().astype(int))
 
         detected_poses = []
-        if not pose_results or pose_results[0].keypoints is None:
+        if not pose_results or pose_results[0].keypoints is None or pose_results[0].boxes is None:
+            return []
+
+        # keypoints와 boxes의 개수가 일치하는지 확인 (안전망)
+        if len(pose_results[0].keypoints) != len(pose_results[0].boxes):
+            logger.warning("Pose detection returned a mismatch between keypoints and boxes count. Skipping frame.")
             return []
 
         for i, person_keypoints in enumerate(pose_results[0].keypoints):
@@ -166,6 +171,9 @@ class PoseDetector:
         탐지된 자세 정보(관절, BBox, 분석 결과)를 프레임에 시각화합니다.
         """
         result_frame = frame.copy()
+        if not detected_poses:
+            return result_frame
+        
         for pose in detected_poses:
             bbox = pose['bbox']
             analysis = pose['analysis']
