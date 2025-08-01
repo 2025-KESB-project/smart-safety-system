@@ -1,126 +1,129 @@
-# 스마트 컨베이어 안전 시스템: Gemini 협업 기록
+# Smart Safety System for Conveyor Worksite
 
-## 🎯 프로젝트 목표
+##  프로젝트 목표
 
 작업 현장에서 발생할 수 있는 ‘끼임 사고’를 방지하기 위한 스마트 안전 시스템 구축. 특히 **비정형 작업 중**에는 전원을 물리적으로 차단하여 **사람이 있는 상황에서 컨베이어벨트를 작동시키지 않도록** 하는 것이 핵심 목표.
 
 ---
 
-## ✅ 핵심 요구사항 및 작업 모드 정의
+## ✅ 핵심 요구사항 요약
 
-이 시스템은 두 가지 핵심 작업 모드를 정의하고, 각 모드에 따라 다른 안전 로직을 적용한다.
-
-### 1. 정형 작업 (Operating Mode)
-- **상황:** 컨베이어 벨트가 정상 작동하며 생산 활동을 하는 상태.
-- **시스템 인식:** `is_conveyor_operating == True`
-- **안전 목표:** 예방적 감속 및 비상 정지.
-  - **일반 위험 (`high`):** 위험 구역 내 사람 감지 시, 속도를 50%로 감속 (`SLOW_DOWN_50_PERCENT`).
-  - **심각 위험 (`critical`):** 작업자 넘어짐 감지 시, 즉시 컨베이어를 정지 (`STOP_POWER`).
-
-### 2. 비정형 작업 (Stopped Mode)
-- **상황:** 컨베이어가 의도적으로 멈춰진 상태에서 작업자가 수리/점검 등을 하는 상태.
-- **시스템 인식:** `is_conveyor_operating == False`
-- **안전 목표:** **전원 원천 차단 (LOTO - Lock-Out/Tag-Out)**.
-  - 작업자가 위험 구역 내에 있을 경우, 다른 사람이 실수로 컨베이어를 재가동하는 것을 막기 위해 전원 공급 자체를 차단 (`PREVENT_POWER_ON`).
+- **비정형 작업 중**: 사람 객체가 위험 구역 내 감지되면 전원 릴레이를 차단하여 **절대 작동 불가**
+- **정형 작업 중**: 사람 감지 시 속도 50% 감속 → **자세 이상, 센서 이상 감지 시 정지**
+- 기존 CCTV와 센서 인프라를 활용한 **저비용 고효율** 구현
+- **작업 모드(정형 / 비정형)** 자동 판단 로직 포함
+- YOLOv8 기반 객체 탐지 + rule engine 기반 제어 시스템
 
 ---
 
-## 🧱 시스템 아키텍처 및 데이터 흐름
+##  시스템 구조 (Layer 구성)
+* 각 계층은 명확한 책임 분리 원칙(SRP)을 따르며, Facade 패턴을 통해 상호작용합니다.
 
-이 시스템은 **두뇌(서버)**와 **근육(아두이노)**으로 구성되며, **USB 시리얼 통신**이라는 신경망으로 연결된다.
+### 1. Input Layer
+- CCTV, 웹캠 → OpenCV로 실시간 프레임 수신 및 전처리
+- 모듈: `input_adapter/`
 
-1.  **Input Layer (눈):** `InputAdapter`가 카메라 영상과 센서 데이터를 받아온다.
-2.  **Detection Layer (인식):** `Detector`가 영상에서 사람, 넘어짐 등을 탐지한다.
-3.  **Logic Layer (판단):** `LogicFacade`가 탐지 결과와 센서 데이터를 종합하여, 현재 작업 모드에 맞는 `actions` (예: `STOP_POWER`) 목록을 생성한다.
-4.  **Control Layer (손과 입):** `ControlFacade`가 `actions` 목록을 받아 실제 장치를 제어한다.
-    - **`SpeedController`:** `STOP_POWER` 같은 명령을 아두이노가 이해하는 `s0\n` 같은 시리얼 명령어로 번역하여 **USB 포트(COM9)**로 전송한다.
-    - **`PowerController`:** 전원의 논리적 상태(ON/OFF)를 관리한다. (라즈베리파이를 사용하지 않으므로 실제 하드웨어 제어는 없음)
-    - **`AlertController`:** 경광등, 사이렌 등 경고 장치를 제어한다.
-5.  **Arduino (근육):** 시리얼 포트로 들어온 `s0\n` 같은 명령어를 해석하여 모터 드라이버에 신호를 보내 모터를 실제로 정지시킨다.
+### 2. Detection Layer
+- `person_detector`, `pose_detector`, `danger_zone_mapper`를 통해 영상에서 위험 요소를 탐지합니다.
+- 모듈: `detect/`
 
----
+### 3. Logic Layer
+- `risk_evaluator`, `mode_manager`, `rule_engine`을 통해 시스템의 상태와 위험도를 판단하고, 최종 행동을 결정합니다.
+- 모듈: `logic/`
 
-## ⚠️ 주요 디버깅 이슈 및 최종 해결 과정
+### 4. Control Layer
+- `alert_controller`, `power_controller` 등 물리적 장치를 제어합니다. (현재는 Mock 모드)
+- 모듈: `control/`
 
-프로젝트 개발 중, **"로직은 정상 작동하는 것처럼 보이나, 실제 아두이노 모터가 움직이지 않고 프레임 드랍이 발생하는"** 심각한 문제가 반복적으로 발생했다. 이 문제의 원인을 찾기 위해 다음과 같은 체계적인 디버깅 과정을 거쳤다.
+### 5. Interface Layer (FastAPI)
+- **RESTful API**: 외부 시스템(UI, 관리 도구)과의 통신을 담당합니다. Pydantic 모델을 통해 모든 요청/응답 데이터의 구조를 명확히 정의합니다.
+- **WebSocket API**: 실시간 로그 및 긴급 경보를 UI에 푸시(Push)합니다.
+- 모듈: `server/`
 
-### 1차 진단: 설정 및 통신 오류 (오진)
-- **가설:** `mock_mode` 활성화, 포트/보드레이트 불일치, 명령어 형식 불일치.
-- **검증:** `test_arduino_direct.py` 스크립트를 통해 아두이노와 직접 통신하는 데 성공. 이로써 하드웨어, 아두이노 코드, 통신 프로토콜 자체에는 문제가 없음을 확인.
-- **결론:** 문제는 Python 애플리케이션 내부에 있음.
-
-### 2차 진단: 포트 자동 탐지 실패 (부분적 원인)
-- **가설:** `SpeedController`의 포트 자동 탐지 기능이 사용자 PC 환경의 COM 포트 설명을 인식하지 못해 연결에 실패함.
-- **조치:** 자동 탐지 로직을 제거하고, `control/speed_controller.py`에 `port="COM9"`를 하드코딩하여 직접 명시.
-- **결과:** 여전히 문제 해결되지 않음.
-
-### 3차 진단: `AlertController`의 `time.sleep()` (오진)
-- **가설:** 알람 발생 시 `time.sleep()`이 메인 스레드를 막아 프레임 드랍과 아두이노 미작동을 유발함.
-- **검증:** 코드 확인 결과, 이미 `threading.Timer`를 사용 중이었음. 가설 기각.
-
-### 4차 진단: 비동기 이벤트 루프 충돌 (오진)
-- **가설:** 백그라운드 스레드에서 UI 알림을 위해 `asyncio.get_running_loop()`을 호출하다 `no running event loop` 오류가 발생하며 스레드가 멈춤.
-- **조치:** `ControlFacade`가 메인 스레드의 이벤트 루프를 명시적으로 전달받아 사용하도록 수정.
-- **결과:** 여전히 문제 해결되지 않음.
-
-### 5차 진단: 데이터베이스 동기 쓰기 (오진)
-- **가설:** DB에 로그를 기록하는 동기 작업(`collection.add()`)이 메인 스레드를 막음.
-- **조치:** `db_service.py`가 DB 쓰기 작업을 별도의 스레드에서 처리하도록 수정.
-- **결과:** 여전히 문제 해결되지 않음.
-
-**최종 원인 및 해결: 설정 파일 이원화 및 DB 의존성**
-
-긴 디버깅 끝에, 문제의 근본 원인이 두 가지 복합적인 이슈에 있었음을 발견했다.
-
-1.  **설정 파일 이원화:**
-    - **문제:** `uvicorn`으로 서버를 실행할 때는 `config/config.py`를 사용하지만, 개발 및 테스트 과정에서 `test/config.py`를 수정하고 있었음. 실제 운영 환경에 적용되는 `config/config.py`에는 `MOCK_MODE_CONTROL = True`가 그대로 남아있어, 모든 제어 모듈이 모의 모드로 작동하고 있었다.
-    - **해결:** **`config/config.py`를 유일한 중앙 설정 파일로 지정**하고, `MOCK_MODE_CONTROL = False`와 `ARDUINO_PORT = "COM9"` 등 모든 최종 설정을 이 파일에 명시했다. `server/app.py`가 이 파일을 직접 읽어 각 모듈에 설정을 주입하도록 전체 구조를 재편성했다.
-
-2.  **DB 모듈 의존성:**
-    - **문제:** Firebase 인증서가 없는 환경에서 서버를 시작하면 `db_service` 객체가 `None`으로 초기화된다. 하지만 `background_worker`는 `db_service`가 `None`인지 확인하지 않고 `db_service.log_event()`를 호출하여 `AttributeError: 'NoneType' object has no attribute 'log_event'` 오류를 발생시켰다.
-    - **해결:** `background_worker.py`에서 로그를 기록하는 부분을 `if service_facade.db_service:` 블록으로 감싸, **DB 서비스가 존재할 때만 로그를 기록하도록** 안전장치를 추가했다.
+### 6. DB Layer (Firestore)
+- **이벤트 로그**: 모든 시스템 이벤트를 `event_logs` 컬렉션에 저장합니다.
+- **위험 구역 설정**: 다각형 위험 구역 정보를 `danger_zones` 컬렉션에 저장합니다.
 
 ---
 
-## 🧠 현재 상태 및 다음 단계
+## ⚠️ 주요 에러 및 해결된 이슈
 
-- **현재:** 모든 디버깅이 완료되었으며, 시스템은 의도한 대로 작동할 준비가 되었다. 서버 시작 시 모터가 100%로 회전하고, 넘어짐 감지 시 즉시 정지하는 핵심 기능이 모두 구현되었다.
-- **다음 단계:** 실제 현장과 유사한 환경에서 다양한 시나리오(여러 명 등장, 조명 변화 등)를 테스트하여 시스템의 안정성과 강건성을 검증해야 한다.
+- **(해결) 서버 시작 시 `TypeError` 발생 (2025-07-31)**:
+    - **문제점**: 서버 시작 시 `TypeError: PowerController.__init__() missing 1 required positional argument: 'communicator'` 에러가 발생하며 애플리케이션이 실행되지 않음.
+    - **원인 분석**: `control` 계층의 리팩토링으로 `PowerController`는 `SerialCommunicator` 객체를 필수로 요구하게 되었으나, `server/app.py`에서 `ControlFacade`를 생성할 때 이 의존성을 제대로 주입해주지 않음. `ControlFacade` 역시 하위 컨트롤러들에게 `communicator`를 전달해주는 로직이 리베이스 과정에서 유실됨.
+    - **해결**:
+        1.  **`control/control_facade.py`**: `__init__` 메소드가 `serial_port`와 `baud_rate`를 인자로 받도록 수정. 내부에서 `SerialCommunicator` 객체를 생성하고, 이를 `PowerController`와 `SpeedController`에 명시적으로 주입하도록 코드를 복원.
+        2.  **`config/config.py`**: 하드웨어 설정을 중앙에서 관리하기 위해 `ARDUINO_PORT`와 `ARDUINO_BAUDRATE` 변수 추가.
+        3.  **`server/app.py`**: `lifespan`에서 `ControlFacade`를 생성할 때, `config.py`에서 정의된 포트와 보드레이트 정보를 읽어와 인자로 전달하도록 수정. 이를 통해 서버 시작 시 제어 계층의 의존성이 올바르게 해결됨.
+
+- **(해결) 전원 ON/OFF 로직 및 시스템 활성화 상태 관리 개선 (2025-07-30)**:
+    - **문제점**: 서버 시작 시 컨베이어가 OFF 상태로 시작해야 하지만, `BackgroundWorker`가 전역 함수와 변수로 구성되어 있어 초기화 및 활성화 상태 관리가 모호했음. 서버가 켜져 있는 내내 불필요하게 전원을 끄려는 시도가 반복되었음.
+    - **해결**: `background_worker.py`에 `system_is_active` 전역 변수를 도입하고, `start_system()`, `stop_system()` 함수를 추가하여 시스템의 활성화 상태를 명확히 제어하도록 리팩토링 중. `run_safety_system` 메인 루프는 `system_is_active`가 `False`일 경우 대기하도록 변경하여 불필요한 자원 소모를 방지하고, `POST` 요청을 통해서만 시스템이 본격적으로 동작하도록 함.
+
+- **(해결) 데이터 모델 불일치 문제 해결 (2025-07-29)**:
+    - **문제점**: 위험 구역 좌표 데이터가 백엔드에서는 `{'0': x, '1': y}` 형태로, 프론트엔드에서는 `{'x': x, 'y': y}` 형태로 사용되어 불필요한 변환 로직과 잠재적 오류 가능성이 존재했음.
+    - **해결**: 백엔드의 API와 서비스 로직을 전면 리팩토링하여, Pydantic 모델을 통해 데이터 형식을 `{'x': x, 'y': y}`로 통일함. 이를 통해 코드의 명확성과 데이터 무결성을 확보하고 프론트엔드와의 연동을 단순화함. (이후 기존 DB 데이터 삭제를 통해 완전한 해결)
+
+- **(해결) API 구조 및 실시간 통신 시스템 전면 개선 (2025-07-28)**:
+    - **문제점**: API 구조가 직관적이지 않고, 5초 폴링 방식의 비효율적인 로그 조회 시스템을 사용하고 있었음.
+    - **해결**: RESTful 원칙에 따라 API 구조를 리팩토링하고, WebSocket 기반의 실시간 통신 아키텍처를 도입하여 시스템 전체의 반응성과 효율성을 극대화함. (상세 내용은 하단 Gemini 이해 섹션 참고)
 
 ---
 
-### 💬 Gemini와의 대화 기록 (2025년 7월 31일 - 최신 업데이트)
+##  폴더 구조 (2025.07-28 기준)
 
-#### 1. `PowerController` 리팩토링 및 릴레이 제어 도입
-- **요청:** `PowerController`가 `SpeedController`에 의존하지 않고, 릴레이 모듈을 직접 제어하도록 변경 요청.
-- **조치:**
-    - **아두이노 코드 (`safesystem-new.ino`) 수정:**
-        - 릴레이 제어용 `RELAY_PIN` (디지털 10번) 추가.
-        - 전원 ON/OFF를 위한 새로운 시리얼 명령어 `p1`(ON), `p0`(OFF) 처리 로직 추가.
-    - **`control/serial_communicator.py` 신규 생성:**
-        - `SpeedController`와 `PowerController`가 시리얼 포트를 공유하며 발생하는 충돌을 막기 위해, 시리얼 통신을 전담하는 `SerialCommunicator` 클래스 생성.
-    - **`control/power_controller.py` 수정:**
-        - `SpeedController` 의존성 제거.
-        - `SerialCommunicator`를 주입받아 `p1`/`p0` 명령을 직접 전송하도록 변경.
-        - 릴레이 제어와 관련된 명확한 로그 추가.
-    - **`control/speed_controller.py` 수정:**
-        - 시리얼 포트 직접 관리 로직 제거.
-        - `SerialCommunicator`를 주입받아 속도 제어(`s` 명령어)만 담당하도록 변경.
-    - **`control/control_facade.py` 수정:**
-        - `SerialCommunicator`의 단일 인스턴스를 생성하여 `PowerController`와 `SpeedController`에 공유/주입하도록 아키텍처 변경.
-        - `STOP_POWER` 액션이 `power_controller.power_off()`를 호출하도록 수정.
+'''
+.
+├── ...
+├── server/
+│   ├── app.py              # FastAPI 앱 초기화 및 중앙 관리
+│   ├── dependencies.py     # 의존성 주입
+│   ├── models/             # Pydantic 모델 (데이터 설계도)
+│   │   ├── control.py
+│   │   ├── status.py
+│   │   ├── websockets.py
+│   │   └── zone.py
+│   ├── routes/             # API 엔드포인트 정의
+│   │   ├── alert_ws.py     # (구 websockets.py) 긴급 알림 WebSocket
+│   │   ├── control_api.py  # 시스템 제어 API
+│   │   ├── log_api.py      # (구 events.py) 과거 로그 조회 API
+│   │   ├── log_ws.py       # (구 log_stream.py) 실시간 로그 WebSocket
+│   │   ├── streaming.py
+│   │   └── zone_api.py
+│   └── services/           # 비즈니스 로직
+│       ├── alert_service.py
+│       ├── db_service.py   # DB 로직 + 실시간 로그 방송 기능
+│       └── zone_service.py
+└── ...
+'''
 
-#### 2. 통합 테스트 (`test_struct.py`) 개선 및 오류 해결
-- **문제 1:** `ControlFacade` 및 `LogicFacade`의 `__init__` 및 `process` 메소드 시그니처 변경으로 인해 테스트 코드에서 `TypeError` 발생.
-- **해결 1:** `test_struct.py`에서 `ControlFacade` 초기화 방식 및 `logic_facade.process()` 호출 인자를 최신 코드에 맞게 수정.
-- **문제 2:** 기존 테스트가 `HIGH` 위험(단순 침입)만 검증하고, `CRITICAL` 위험(넘어짐)에 대한 검증이 누락됨.
-- **해결 2:** `test_struct.py`에 `CRITICAL` 위험 상황에 대한 테스트 로직 추가.
-    - 메인 루프에서 `STOP_POWER` 액션이 감지되는지 확인.
-    - 감지 시, 테스트 성공 로그를 출력하고 자동으로 테스트를 종료하도록 하여 `PowerController`를 통한 전원 차단 흐름을 명시적으로 검증.
+---
 
-#### 3. 백그라운드 워커 (`background_worker.py`) 오류 해결
-- **문제:** 운전 모드 시작 시 `AttributeError: 'ControlFacade' object has no attribute 'get_power_status'` 발생.
-- **원인 분석:** `background_worker`가 과거에 사용되던 `get_power_status()` 메소드를 호출하려 했으나, 리팩토링 과정에서 해당 메소드가 사라짐.
-- **해결:**
-    - `control/control_facade.py`: `power_controller.get_status()`를 호출하여 결과를 반환하는 `get_power_status()` 메소드를 다시 추가하여 하위 호환성 확보.
-    - `server/background_worker.py`: `get_power_status()`가 반환하는 딕셔너리의 키를 `'conveyor_is_on'`에서 현재 `PowerController`가 사용하는 올바른 키인 `'is_power_on'`으로 수정.
+##  향후 계획
+
+- **React 프론트엔드 연동**: 개선된 API(`log_api.py`, `zone_api.py`)와 WebSocket(`log_ws.py`, `alert_ws.py`)을 프론트엔드에 완전히 통합.
+- **(완료) 실시간 로그 업데이트**: 5초 폴링 방식을 WebSocket 기반 실시간 스트리밍으로 전환 완료.
+- **Failsafe 로직 강화**: UI 승인 없이는 절대 전원 불가 구조 고려.
+- **Rule Engine 방식 개선**: Risk Score vs Boolean 판단.
+
+---
+
+##  현재까지의 프로젝트 이해 (Gemini) - 2025-07-31 업데이트
+
+이 문서는 Gemini가 프로젝트의 최신 상태와 핵심 로직에 대해 이해하고 있는 내용을 요약합니다.
+
+### 1. 제어 계층 (`Control Layer`) 리팩토링 및 하드웨어 연동
+
+- **`SerialCommunicator` 도입**: `SpeedController`와 `PowerController`가 시리얼 포트를 공유하며 발생할 수 있는 충돌을 원천적으로 방지하기 위해, 시리얼 통신을 전담하는 `SerialCommunicator` 클래스를 도입. 이제 모든 하드웨어 제어 명령은 이 클래스를 통해 아두이노로 전송됨.
+- **`PowerController` 역할 재정의**: 기존의 논리적 상태만 관리하던 것에서, `SerialCommunicator`를 통해 릴레이 모듈에 직접 ON/OFF(`p1`/`p0`) 명령을 내리는 역할로 변경. 실제적인 전원 차단 기능을 담당하게 됨.
+- **의존성 주입(DI) 구조 확립**: `server/app.py`가 시작될 때, `config.py`에서 포트 정보를 읽어 `ControlFacade`를 초기화. `ControlFacade`는 `SerialCommunicator`의 단일 인스턴스를 생성하여, 이를 `PowerController`와 `SpeedController`에 주입(Injection)하는 명확한 의존성 흐름을 확립함. 이를 통해 서버 시작 시 발생하던 `TypeError`를 해결.
+
+### 2. 통합 테스트 (`test_struct.py`) 강화
+
+- **`CRITICAL` 위험 시나리오 검증**: 기존에 누락되었던 '넘어짐' 상황에 대한 테스트 로직을 추가. `STOP_POWER` 액션이 감지되면 테스트가 성공적으로 종료되도록 구현하여, 시스템의 가장 중요한 안전 기능(전원 차단)을 검증할 수 있게 됨.
+
+### 3. 시스템 아키텍처 및 데이터 흐름 이해
+
+- **5-Step Pipeline**: (Input) → (Detection) → (Logic) → (Control) → (Execution) 으로 이어지는 명확한 5단계 파이프라인 구조를 이해하고 있음.
+- **데이터 객체**: 각 계층이 `DetectionResult`, `List[Action]`, `Serial Command` 등 명확하게 정의된 데이터 객체를 통해 통신하는 핵심적인 아키텍처를 파악함.
+- **'웅크림' 탐지 로직**: `PoseDetector`가 몸통의 세로 길이와 전체 키의 비율을 계산하여 '웅크림/끼임' 상태를 `high` 위험 등급으로 판단하는 구체적인 로직을 이해함. 이 정보는 `DetectionResult`에 직접 포함되지 않고, `people_in_zones` 필드에 위험 등급으로서 간접적으로 반영됨을 인지.
