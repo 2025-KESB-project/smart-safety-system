@@ -38,9 +38,9 @@ from server.routes import log_api, streaming, alert_ws, zone_api, control_api, l
 # 중앙 설정 (CONFIG)
 # --------------------------------------------------------------------------
 CONFIG = {
-    'input': {'camera_index': 0, 'mock_mode': False},
+    'input': {'camera_index': 3, 'mock_mode': False},
     'detector': {'person_detector': {'model_path': 'yolov8n.pt'}, 'pose_detector': {'pose_model_path': 'yolov8n-pose.pt'}},
-    'control': {'mock_mode': True},
+    'control': {'mock_mode': False},
     'service': {'firebase_credential_path': str(Path(__file__).parent.parent / "config" / "firebase_credential.json")}
 }
 

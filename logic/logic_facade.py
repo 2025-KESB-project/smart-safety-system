@@ -32,7 +32,7 @@ class LogicFacade:
         
         logger.info("LogicFacade 및 모든 하위 로직 모듈 초기화 완료.")
 
-    def process(self, detection_result: Dict[str, Any], sensor_data: Dict[str, Any], current_mode: str, current_conveyor_status: bool) -> List[Dict[str, Any]]:
+    def process(self, detection_result: Dict[str, Any], sensor_data: Dict[str, Any], current_mode: str, current_conveyor_status: bool, current_conveyor_speed: int) -> List[Dict[str, Any]]:
         """
         전체 로직 파이프라인을 실행합니다.
         1. 위험도 평가
@@ -43,6 +43,7 @@ class LogicFacade:
             sensor_data: InputAdapter에서 제공하는 센서 데이터
             current_mode: SystemStateManager가 관리하는 현재 작업 모드 ('AUTOMATIC' 또는 'MAINTENANCE')
             current_conveyor_status: PowerController가 관리하는 현재 컨베이어 작동 상태 (True/False)
+            current_conveyor_speed: SpeedController가 관리하는 현재 컨베이어 속도 (%)
 
         Returns:
             RuleEngine이 결정한 최종 행동 목록
@@ -56,7 +57,12 @@ class LogicFacade:
         )
         
         # 2. 최종 행동 결정 (외부에서 전달받은 모드와 위험도 분석 결과를 기반으로)
-        actions = self.rule_engine.decide_actions(current_mode, self.last_risk_analysis)
+        actions = self.rule_engine.decide_actions(
+            mode=current_mode, 
+            risk_analysis=self.last_risk_analysis,
+            conveyor_is_on=current_conveyor_status,
+            current_speed_percent=current_conveyor_speed
+        )
         
         # 3. 결정된 actions 목록을 그대로 반환하여 호출자(background_worker)가 처리하도록 합니다.
         return actions

@@ -48,7 +48,7 @@ def run_safety_system(app: FastAPI):
         return
 
     try:
-        input_adapter = InputAdapter(camera_index=0, mock_mode=False)
+        input_adapter = InputAdapter(camera_index=3, mock_mode=False)
         logger.success("InputAdapter 초기화 완료.")
     except Exception as e:
         logger.error(f"InputAdapter 초기화 중 심각한 오류 발생: {e}")
@@ -62,6 +62,8 @@ def run_safety_system(app: FastAPI):
         "details": {"message": "System worker started, conveyor forced OFF."}
     })
 
+    was_active_previously = False
+
     while True:
         try:
             # 1. 영상 프레임 및 센서 데이터 획득 (항상 실행)
@@ -74,12 +76,15 @@ def run_safety_system(app: FastAPI):
             raw_frame = input_data['raw_frame']
             display_frame = raw_frame.copy()
 
+            is_active_now = state_manager.is_active()
+
             # 2. 시스템 활성화 상태일 때만 안전 로직 및 시각화 수행
-            if state_manager.is_active():
+            if is_active_now:
                 # StateManager를 통해 논리적/물리적 상태를 한 번에 가져옵니다.
                 current_status = state_manager.get_status()
                 current_mode = current_status.get("operation_mode")
                 conveyor_is_on = current_status.get("conveyor_is_on", False)
+                conveyor_speed = current_status.get("conveyor_speed", 100)
                 sensor_data = input_data['sensor_data']
 
                 # 객체 탐지
@@ -92,7 +97,8 @@ def run_safety_system(app: FastAPI):
                     detection_result=detection_result,
                     sensor_data=sensor_data,
                     current_mode=current_mode,
-                    current_conveyor_status=conveyor_is_on
+                    current_conveyor_status=conveyor_is_on,
+                    current_conveyor_speed=conveyor_speed
                 )
 
                 # 액션 실행 (조정자가 실행 분배)
@@ -167,11 +173,21 @@ def run_safety_system(app: FastAPI):
                 cv2.putText(display_frame, risk_text, (15, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, risk_color, 2)
             
             else:
+                # "활성 -> 비활성"으로 전환되는 순간, 딱 한 번만 종료 명령을 실행합니다.
+                if was_active_previously:
+                    logger.info("시스템이 비활성화되어 하드웨어 전원을 차단합니다.")
+                    control_facade.execute_actions([
+                        {"type": "POWER_OFF", "details": {"reason": "system_deactivated"}}
+                    ])
+
                 # 시스템이 비활성화 상태일 때 대기하며 화면에 상태 표시
                 cv2.putText(display_frame, "SYSTEM INACTIVE", (15, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
                 time.sleep(0.5) # CPU 사용량 감소를 위한 대기
 
-            # 3. 최신 프레임을 전역 변수에 업데이트 (항상 실행)
+            # 3. 다음 루프를 위해 현재 활성화 상태를 저장합니다.
+            was_active_previously = is_active_now
+
+            # 4. 최신 프레임을 전역 변수에 업데이트 (항상 실행)
             latest_frame = display_frame.copy()
 
         except Exception as e:
