@@ -241,6 +241,8 @@ html, body {
   background: #fff;
   color: #000;
 }
+
+/* 위험 구역 이름 입력 */
 .zone-name-input {
   width: 100%;
   padding: 8px;
@@ -249,6 +251,24 @@ html, body {
   border: 1px solid #ccc;
   border-radius: 4px;
 }
+/* src/pages/Dashboard/Dashboard.css */
+
+.right-panel {
+  flex: none;
+  width: 500px;
+  display: flex;
+  flex-direction: column;
+
+  /* 추가: 부모 컨테이너(main-layout)에서 남은 높이 채우기 */
+  height: 100%;
+
+  /* 추가: 내부 스크롤 제어 */
+  overflow: hidden;
+    min-height: 0;
+}
+.log-board {
+  display: flex;
+  flex-direction: column;
 
 /* 위험 구역 이름 입력 */
 .zone-name-input {
