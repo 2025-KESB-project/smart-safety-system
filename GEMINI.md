@@ -108,7 +108,7 @@
 
 ---
 
-##  현재까지의 프로젝트 이해 (Gemini) - 2025-07-31 업데이트
+##  현재까지의 프로젝트 이해 (Gemini) - 2025-08-01 업데이트
 
 이 문서는 Gemini가 프로젝트의 최신 상태와 핵심 로직에 대해 이해하고 있는 내용을 요약합니다.
 
@@ -127,3 +127,15 @@
 - **5-Step Pipeline**: (Input) → (Detection) → (Logic) → (Control) → (Execution) 으로 이어지는 명확한 5단계 파이프라인 구조를 이해하고 있음.
 - **데이터 객체**: 각 계층이 `DetectionResult`, `List[Action]`, `Serial Command` 등 명확하게 정의된 데이터 객체를 통해 통신하는 핵심적인 아키텍처를 파악함.
 - **'웅크림' 탐지 로직**: `PoseDetector`가 몸통의 세로 길이와 전체 키의 비율을 계산하여 '웅크림/끼임' 상태를 `high` 위험 등급으로 판단하는 구체적인 로직을 이해함. 이 정보는 `DetectionResult`에 직접 포함되지 않고, `people_in_zones` 필드에 위험 등급으로서 간접적으로 반영됨을 인지.
+
+### 4. 주요 디버깅 및 해결 과정 (2025-08-01)
+
+- **`AttributeError: 'SpeedController' object has no attribute 'get_status'`**: `ControlFacade`가 `SpeedController`의 상태를 조회할 때 발생. `SpeedController`의 `get_system_status` 메소드 이름을 `get_status`로 변경하여 해결.
+- **모터 구동 문제 (초기 속도)**: `SpeedController`의 `current_speed_percent`가 기본값 100으로 설정되어 있어, `resume_full_speed` 호출 시 명령이 전송되지 않던 문제. `SpeedController`의 초기 `current_speed_percent`를 0으로 변경하여 해결.
+- **`AttributeError: 'AlertController' object has no attribute 'get_status'`**: `ControlFacade`가 `AlertController`의 상태를 조회할 때 발생. `AlertController`에 `get_status` 메소드를 추가하여 해결.
+- **`TypeError: PowerController.__init__() missing 1 required positional argument: 'communicator'`**: `ControlFacade`가 `PowerController`를 초기화할 때 `communicator`를 전달하지 않아 발생. `ControlFacade`의 `__init__` 메소드를 수정하여 `SerialCommunicator`를 생성하고 하위 컨트롤러에 주입하도록 해결.
+- **`AttributeError: 'PowerController' object has no attribute 'turn_off'`**: `ControlFacade`가 `PowerController`의 `turn_off` 메소드를 호출했으나, 실제 메소드 이름은 `power_off`여서 발생. `ControlFacade`의 `execute_actions` 메소드에서 `turn_off`를 `power_off`로 수정하여 해결.
+- **아두이노 응답 로그 미출력**: `SerialCommunicator`가 아두이노의 응답을 읽지 않던 문제. `send_command` 메소드에 `readline()`을 통한 응답 수신 및 로깅 로직 추가하여 해결.
+- **`RuleEngine`의 반복적인 `POWER_ON`/`STOP_POWER` 명령 생성**: `LogicFacade`가 `RuleEngine`에 `current_conveyor_status`를 전달하고, `RuleEngine`은 컨베이어가 작동 중일 때만 `STOP_POWER` 명령을 생성하도록 로직을 수정하여 해결. (이전에는 `POWER_ON` 명령 반복 생성 문제도 동일한 방식으로 해결됨)
+- **`ControlFacade`의 `POWER_OFF` 액션 무시**: `background_worker`가 `POWER_OFF` 액션을 보냈을 때 `ControlFacade`가 이를 알 수 없는 액션으로 처리하던 문제. `ControlFacade`의 `execute_actions` 메소드 조건문에 `action_type == "POWER_OFF"`를 추가하여 해결.
+- **`stop_system` API 하드웨어 연동**: `control_api.py`의 `stop_system` 메소드가 `ControlFacade`를 통해 실제 하드웨어 전원을 차단하도록 수정.
