@@ -40,7 +40,7 @@ export default function Dashboard() {
   // 위험 모드 토글 & 메시지
   const [isDangerMode,   setIsDangerMode]   = useState(false);
   const [showInstruction, setShowInstruction] = useState(false);
-  const [showComplete,    setShowComplete]    = useState(false);   = useState([]);
+  const [showComplete,    setShowComplete]    = useState(false);
 
   const navigate = useNavigate();
 
@@ -397,7 +397,8 @@ export default function Dashboard() {
             onStop={handleStop}
             onDangerMode={startDangerMode}
           />
-          {!isDangerMode ? (
+          {/* isDangerMode가 false일 때만 ZoneConfigPanel 렌더링 */}
+          { !isDangerMode &&(
             <>
               <ZoneConfigPanel
                 zones={zones}
