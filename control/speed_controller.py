@@ -22,7 +22,7 @@ class SpeedController:
         """
         self.communicator = communicator
         self.mock_mode = mock_mode
-        self.current_speed_percent = 100  # 0-100%
+        self.current_speed_percent = 0  # 0-100%
         self.current_state = SpeedState.FULL
         self.speed_history = []
         self.max_history_size = 100
@@ -98,7 +98,7 @@ class SpeedController:
         """속도 변경 히스토리를 반환합니다."""
         return self.speed_history[-limit:]
 
-    def get_system_status(self) -> Dict:
+    def get_status(self) -> Dict:
         """시스템 상태를 반환합니다."""
         return {
             'current_speed_percent': self.current_speed_percent,

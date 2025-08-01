@@ -47,10 +47,13 @@ class ControlFacade:
 
             logger.debug(f"Executing action: {action_type} with reason: {reason}")
 
-            if action_type == "POWER_ON":
-                self.power_controller.power_on(reason)
-            elif action_type == "POWER_OFF":
+            # Action 타입을 보고 적절한 컨트롤러의 메소드를 호출합니다.
+            if action_type == "STOP_POWER" or action_type == "PREVENT_POWER_ON" or action_type == "POWER_OFF":
+                # 2중 안전 장치: 릴레이 전원과 모터 속도를 모두 차단합니다.
                 self.power_controller.power_off(reason)
+                self.speed_controller.stop_conveyor(reason)
+            elif action_type == "POWER_ON": # API 등 외부 요청을 위한 액션
+                self.power_controller.power_on(reason)
             elif action_type == "REDUCE_SPEED_50":
                 self.speed_controller.slow_down_50_percent(reason)
             elif action_type == "RESUME_FULL_SPEED":
@@ -79,8 +82,8 @@ class ControlFacade:
 
         # API 응답 모델(SystemStatusResponse)에 맞게 키 이름을 통일합니다.
         statuses = {
-            "conveyor_is_on": power_status.get("conveyor_is_on"),
+            "conveyor_is_on": power_status.get("is_power_on"),
             "conveyor_speed": speed_status.get("current_speed_percent"),
-            **alert_status # alert_status의 모든 키-값을 추가
+            "is_alert_on": alert_status.get("is_alert_on"),
         }
         return statuses
