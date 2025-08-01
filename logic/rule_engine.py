@@ -70,8 +70,7 @@ class RuleEngine:
                 actions.append({"type": "TRIGGER_ALARM_MEDIUM", "details": {"reason": "crouching"}})
                 log_action = {"type": "LOG_CROUCHING_WARN", "details": {}}
             else:
-                # 운전 모드이고, 아무 위험이 없으면 정상 운전
-                actions.append({"type": "POWER_ON", "details": {"reason": "normal_operation"}})
+                # 운전 모드이고, 아무 위험이 없으면 정상 운전 (속도 유지)
                 actions.append({"type": "RESUME_FULL_SPEED", "details": {"reason": "safety_zone_clear"}})
                 log_action = {"type": "LOG_NORMAL_OPERATION", "details": {}}
 
