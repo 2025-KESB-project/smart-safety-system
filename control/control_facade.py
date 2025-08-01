@@ -14,11 +14,20 @@ class ControlFacade:
     물리적 장치 제어를 위한 통합 인터페이스(Facade).
     각 컨트롤러의 인스턴스를 소유하고 관리합니다.
     """
-    def __init__(self, mock_mode: bool = True):
-        # 각 컨트롤러의 인스턴스를 생성하여 소유합니다.
-        self.power_controller = PowerController(mock_mode=mock_mode)
-        self.speed_controller = SpeedController(mock_mode=mock_mode)
+    def __init__(self, mock_mode: bool = True, serial_port: str = 'COM9', baud_rate: int = 9600):
+        # 1. 시리얼 통신을 전담할 단일 인스턴스를 생성합니다.
+        self.communicator = SerialCommunicator(port=serial_port, baud_rate=baud_rate, mock_mode=mock_mode)
+        # 2. 생성된 communicator를 각 컨트롤러에 주입합니다.
+        self.speed_controller = SpeedController(communicator=self.communicator, mock_mode=mock_mode)
+        self.power_controller = PowerController(communicator=self.communicator, mock_mode=mock_mode)
         self.alert_controller = AlertController(mock_mode=mock_mode)
+
+        # 최종 하드웨어 연결 상태를 요약하여 로깅합니다.
+        if not self.communicator.mock_mode:
+            logger.success("하드웨어 제어 모드가 활성화되었습니다 (모의 모드 OFF).")
+        else:
+            logger.warning("하드웨어 제어가 비활성화되었습니다 (모의 모드 ON).")
+
         logger.info("ControlFacade 초기화 완료.")
 
     def execute_actions(self, actions: List[Dict[str, Any]]):
@@ -39,9 +48,9 @@ class ControlFacade:
             logger.debug(f"Executing action: {action_type} with reason: {reason}")
 
             if action_type == "POWER_ON":
-                self.power_controller.turn_on(reason)
+                self.power_controller.power_on(reason)
             elif action_type == "POWER_OFF":
-                self.power_controller.turn_off(reason)
+                self.power_controller.power_off(reason)
             elif action_type == "REDUCE_SPEED_50":
                 self.speed_controller.slow_down_50_percent(reason)
             elif action_type == "RESUME_FULL_SPEED":
