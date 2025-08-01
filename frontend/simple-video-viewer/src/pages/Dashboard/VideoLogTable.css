@@ -1,95 +1,72 @@
+/* src/pages/VideoLogTable.css */
+
 .log-board {
   background: #fff;
   border-radius: 8px;
   padding: 16px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-  max-height: calc(100vh - 160px);
+  box-shadow: 0 0 6px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* 제목 스타일 */
+.log-board h3 {
+  margin: 0 0 16px;
+  font-size: 1.125rem;
+  font-weight: 500;
+}
+
+/* 테이블 스크롤 래퍼 */
+.log-board .table-wrapper {
+  flex: 1;
   overflow-y: auto;
 }
 
-.log-board h3 {
-  margin: 0 0 12px;
-  font-size: 18px;
-  color: #333;
-  font-weight: 600;
-}
-
+/* 테이블 기본 스타일 */
 .log-board table {
   width: 100%;
-  border-collapse: separate;
-  border-spacing: 0 6px;
+  border-collapse: collapse;
+  table-layout: fixed;
 }
-
-.log-board thead th {
-  position: sticky;
-  top: 0;
-  background: #f0f4f8;
-  color: #555;
-  font-weight: 600;
-  text-align: left;
-  padding: 10px 12px;
-  border-bottom: 2px solid #e1e8f0;
-  z-index: 1;
+.log-board thead {
+  background-color: #f3f4f6;
 }
-
+.log-board th,
 .log-board td {
-  padding: 10px 12px;
-  font-size: 14px;
-  color: #444;
-}
-
-/* 기본 행 배경 */
-.log-board tbody tr {
-  background: #fafbfc;
-  transition: background 0.2s;
-  cursor: pointer;
-}
-
-/* 짝수/홀수 배경 */
-.log-board tbody tr:nth-child(even) {
-  background: #f4f7fb;
-}
-
-/* 호버 효과 */
-.log-board tbody tr:hover {
-  background: #e1f0ff;
-}
-
-/* 활성(선택) 행 */
-.log-board tbody tr.active {
-  outline: 2px solid #1890ff;
-}
-
-/* 위험도 단계별 배경 */
-.log-board tbody tr.status-safe {
-  background: #bfffe1f0;
-}
-.log-board tbody tr.status-medium {
-  background: #f7ff56;
-}
-.log-board tbody tr.status-high {
-  background: #ffb554ee;
-}
-.log-board tbody tr.status-critical {
-  background: #ff807e;
-}
-
-/* 날짜/시간 칼럼 고정 */
-.log-board td:nth-child(1),
-.log-board td:nth-child(2) {
+  padding: 8px;
+  text-align: left;
   white-space: nowrap;
-  width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-bottom: 1px solid #e5e7eb;
+}
+.log-board tr.active {
+  background-color: #e0f2fe;
+}
+.log-board {
+  flex: 1;                  /* 부모 flex 컨테이너에서 남은 높이 차지 */
+  display: flex;
+  flex-direction: column;
 }
 
-/* 스크롤바 커스터마이징 */
-.log-board::-webkit-scrollbar {
-  width: 6px;
+.table-wrapper {
+  flex: 1;
+  overflow-y: auto;
 }
-.log-board::-webkit-scrollbar-track {
-  background: #f0f4f8;
-  border-radius: 3px;
+/* src/pages/VideoLogTable.css */
+
+.log-board {
+  /* flex 컨테이너로 만들어서 자식 .table-wrapper가 남은 공간을 차지하게 */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
-.log-board::-webkit-scrollbar-thumb {
-  background: #c2c2c2;
-  border-radius: 3px;
+
+.table-wrapper {
+  /* 남은 세로 공간을 채우면서 스크롤 가능 */
+  flex: 1 1 auto;
+  overflow-y: auto;
 }
