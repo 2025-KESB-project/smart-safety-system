@@ -19,20 +19,27 @@ class SerialCommunicator:
             self._initialize_serial()
 
     def _initialize_serial(self):
-        """시리얼 포트 연결을 초기화합니다."""
+        """시리얼 포트 연결을 초기화하고 아두이노의 응답을 확인합니다."""
         try:
-            # 포트가 이미 열려있으면 닫고 다시 엽니다.
             if self.serial and self.serial.is_open:
                 self.serial.close()
             
             logger.info(f"시리얼 포트 {self.port}에 {self.baud_rate}bps로 연결을 시도합니다...")
-            self.serial = serial.Serial(self.port, self.baud_rate, timeout=1)
-            time.sleep(2)  # 아두이노가 리셋될 시간을 줍니다.
-            logger.success(f"시리얼 포트 {self.port} 연결 성공.")
-            # 연결 후 아두이노로부터 초기 메시지 읽기 (버퍼 비우기)
-            initial_message = self.serial.read_all().decode(errors='ignore').strip()
+            self.serial = serial.Serial(self.port, self.baud_rate, timeout=2) # 타임아웃 2초로 증가
+            time.sleep(2)  # 아두이노가 리셋되고 메시지를 보낼 시간을 줍니다.
+
+            # 연결 후 아두이노로부터 초기 메시지 읽기
+            initial_message = self.serial.readline().decode(errors='ignore').strip()
             if initial_message:
-                logger.debug(f"Arduino says: {initial_message}")
+                logger.success(f"아두이노 연결 성공. 응답: \"{initial_message}\"")
+            else:
+                logger.warning("포트 연결은 성공했으나, 아두이노로부터 응답이 없습니다.")
+
+        except serial.SerialException as e:
+            logger.error(f"시리얼 포트 {self.port}에 연결할 수 없습니다: {e}")
+            logger.error("모의 모드로 전환합니다. 실제 하드웨어 제어가 이루어지지 않습니다.")
+            self.mock_mode = True
+            self.serial = None
 
         except serial.SerialException as e:
             logger.error(f"시리얼 포트 {self.port}에 연결할 수 없습니다: {e}")

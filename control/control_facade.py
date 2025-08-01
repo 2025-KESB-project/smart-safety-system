@@ -40,10 +40,8 @@ class ControlFacade:
 
             if action_type == "POWER_ON":
                 self.power_controller.turn_on(reason)
-                self.speed_controller.resume_full_speed(reason)
             elif action_type == "POWER_OFF":
                 self.power_controller.turn_off(reason)
-                self.speed_controller.stop_conveyor(reason)
             elif action_type == "REDUCE_SPEED_50":
                 self.speed_controller.slow_down_50_percent(reason)
             elif action_type == "RESUME_FULL_SPEED":

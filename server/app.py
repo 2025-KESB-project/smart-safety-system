@@ -84,8 +84,15 @@ async def lifespan(app: FastAPI):
     if app.state.db:
         db_client = app.state.db
         
-        # 제어 계층 Facade를 먼저 생성합니다.
-        app.state.control_facade = ControlFacade(mock_mode=CONFIG['control']['mock_mode'])
+        # config.py에서 설정을 가져옵니다.
+        from config import config
+
+        # 제어 계층 Facade를 생성하며 시리얼 포트 정보를 전달합니다.
+        app.state.control_facade = ControlFacade(
+            mock_mode=config.MOCK_MODE_CONTROL,
+            serial_port=config.ARDUINO_PORT,
+            baud_rate=config.ARDUINO_BAUDRATE
+        )
         logger.success("ControlFacade 초기화 완료.")
 
         # ControlFacade를 SystemStateManager에 주입하여 생성합니다.
