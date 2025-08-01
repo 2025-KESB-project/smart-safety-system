@@ -354,12 +354,12 @@ export default function Dashboard() {
       </div>
 
       {/* WebSocket 연결 상태 표시 */}
-      <div className="ws-status">
+      {/*<div className="ws-status">
         {wsStatus === 'connecting' && '🔄 연결 중...'}
         {wsStatus === 'open'       && '✅ 연결됨'}
         {wsStatus === 'closed'     && '⛔ 연결 끊김'}
         {wsStatus === 'error'      && `❌ 오류 발생: ${wsError?.message}`}
-      </div>
+      </div>*/}
 
       {/* Main */}
       <div className="main-layout">
