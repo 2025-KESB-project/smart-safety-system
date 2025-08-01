@@ -55,8 +55,12 @@ class LogicFacade:
             conveyor_status=current_conveyor_status
         )
         
-        # 2. 최종 행동 결정 (외부에서 전달받은 모드와 위험도 분석 결과를 기반으로)
-        actions = self.rule_engine.decide_actions(current_mode, self.last_risk_analysis)
+        # 2. 최종 행동 결정 (외부에서 전달받은 모드, 컨베이어 상태, 위험도 분석 결과를 기반으로)
+        actions = self.rule_engine.decide_actions(
+            mode=current_mode, 
+            risk_analysis=self.last_risk_analysis,
+            current_conveyor_status=current_conveyor_status
+        )
         
         # 3. 결정된 actions 목록을 그대로 반환하여 호출자(background_worker)가 처리하도록 합니다.
         return actions

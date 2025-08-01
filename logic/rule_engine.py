@@ -15,13 +15,14 @@ class RuleEngine:
         self.last_logged_state = None # 마지막으로 로깅한 상태를 저장
         logger.info("RuleEngine 초기화 완료. (사실 기반)")
 
-    def decide_actions(self, mode: str, risk_analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def decide_actions(self, mode: str, risk_analysis: Dict[str, Any], current_conveyor_status: bool) -> List[Dict[str, Any]]:
         """
         현재 상태에 따라 수행해야 할 행동 목록을 결정합니다.
 
         Args:
-            mode: SystemStateManager가 제공하는 현재 작업 모드 ('AUTOMATIC' or 'MAINTENANCE')
+            mode: SystemStateManager가 제공하는 현재 작업 모드
             risk_analysis: RiskEvaluator가 평가한 위험 사실 목록
+            current_conveyor_status: PowerController가 관리하는 현재 컨베이어 작동 상태
 
         Returns:
             수행할 행동을 나타내는 딕셔너리 리스트
@@ -38,8 +39,8 @@ class RuleEngine:
         # --- 규칙 정의 ---
         log_action = None
 
-        # 규칙 0: 비상 정지 조건 (모든 모드에서 최우선)
-        if is_falling or has_sensor_alert:
+        # 규칙 0: 비상 정지 조건 (모든 모드에서 최우선, 컨베이어가 켜져 있을 때만)
+        if (is_falling or has_sensor_alert) and current_conveyor_status is True:
             reason = "falling_detected" if is_falling else "sensor_alert"
             log_type = "LOG_CRITICAL_FALLING" if is_falling else "LOG_CRITICAL_SENSOR"
             actions.append({"type": "POWER_OFF", "details": {"reason": reason}})
