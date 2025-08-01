@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from fastapi.responses import JSONResponse
 from loguru import logger
 
+
 from server.dependencies import get_state_manager, get_db_service, get_logic_facade
 from server.state_manager import SystemStateManager
 from server.models.status import SystemStatusResponse, ConfirmationResponse
