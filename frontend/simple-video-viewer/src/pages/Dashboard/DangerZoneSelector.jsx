@@ -1,7 +1,7 @@
 // src/pages/Dashboard/DangerZoneSelector.jsx
-import React, { useRef, useState, useEffect } from 'react'
-import LiveStreamContent from './LiveStreamContent'
-import './DangerZoneSelector.css'
+import React, { useRef, useState, useEffect } from 'react';
+import LiveStreamContent from './LiveStreamContent';
+import './DangerZoneSelector.css';
 
 export default function DangerZoneSelector({ eventId, onComplete }) {
   const canvasRef = useRef(null)
