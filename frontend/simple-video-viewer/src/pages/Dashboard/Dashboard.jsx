@@ -158,6 +158,7 @@ export default function Dashboard() {
   const handleStartAutomatic = () => handleControl('http://localhost:8000/api/control/start_automatic');
   const handleStartMaintenance = () => handleControl('http://localhost:8000/api/control/start_maintenance');
   const handleStop = () => handleControl('http://localhost:8000/api/control/stop');
+ 
   // 6-1) 위험 구역 목록 조회
   const fetchZones = useCallback(async () => {
     try {
@@ -376,19 +377,15 @@ export default function Dashboard() {
 
         {/* 오른쪽: 로그 테이블 또는 설정 패널 */}
         <div className="right-panel">
-          {loading && logs.length===0 ? (
-            <div className="loading">로그 불러오는 중...</div>
-          ) : error ? (
-            // 페이지 로드 에러만 여기에 표시
-            <div className="error">{error}</div>
-          ) : (
-            <VideoLogTable
-              logs={logs}
-              activeId={activeId}
-              onSelect={setActiveId}
-            />
-          )}
-
+          {!isDangerMode ? (
+            <>
+              {loading && !logs.length ? (
+                <div className="loading">로그를 불러오는 중…</div>
+              ) : error ? (
+                <div className="error">{error}</div>
+              ) : (
+                <VideoLogTable logs={logs} activeId={activeId} onSelect={setActiveId} />
+              )}
           <ConveyorMode
             operationMode={operationMode}
             loading={loading}
@@ -397,8 +394,8 @@ export default function Dashboard() {
             onStop={handleStop}
             onDangerMode={startDangerMode}
           />
-          {/* isDangerMode가 false일 때만 ZoneConfigPanel 렌더링 */}
-          { !isDangerMode &&(
+            </>
+          ) : (
             <>
               <ZoneConfigPanel
                 zones={zones}
@@ -431,6 +428,7 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
 
       {/* 에러 팝업 모달 */}
       {popupError && (
