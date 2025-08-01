@@ -17,7 +17,7 @@ export default function Dashboard() {
   const [activeId,       setActiveId]       = useState(null);
   const [loading,        setLoading]        = useState(false);
   const [error,          setError]          = useState(null);
-  const [isOperating,    setIsOperating]    = useState(null);
+  const [operationMode,  setOperationMode]  = useState(null);
 
   // 위험 모드 토글 & 메시지
   const [isDangerMode,   setIsDangerMode]   = useState(false);
@@ -73,7 +73,7 @@ export default function Dashboard() {
       const res = await fetch(url, { method: 'POST' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setIsOperating(data.system_is_active);
+      setOperationMode(data.operation_mode);
     } catch (e) {
       console.error(e);
       setError('명령을 실행하는 중 오류가 발생했습니다.');
@@ -167,7 +167,7 @@ export default function Dashboard() {
           )}
 
           <ConveyorMode
-            isOperating={isOperating}
+            operationMode={operationMode}
             loading={loading}
             onStartAutomatic={handleStartAutomatic}
             onStartMaintenance={handleStartMaintenance}
