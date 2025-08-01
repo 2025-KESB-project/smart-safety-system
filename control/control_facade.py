@@ -1,7 +1,8 @@
 from loguru import logger
 from typing import List, Dict, Any
 
-# 변경된 PowerController를 임포트합니다.
+from control.serial_communicator import SerialCommunicator
+from control.alert_controller import AlertController
 from control.power_controller import PowerController
 from control.speed_controller import SpeedController
 from control.alert_controller import AlertController, AlertLevel # AlertLevel 임포트
@@ -13,11 +14,20 @@ class ControlFacade:
     물리적 장치 제어를 위한 통합 인터페이스(Facade).
     각 컨트롤러의 인스턴스를 소유하고 관리합니다.
     """
-    def __init__(self, mock_mode: bool = True):
-        # 각 컨트롤러의 인스턴스를 생성하여 소유합니다.
-        self.power_controller = PowerController(mock_mode=mock_mode)
-        self.speed_controller = SpeedController(mock_mode=mock_mode)
+    def __init__(self, mock_mode: bool = True, serial_port: str = 'COM9', baud_rate: int = 9600):
+        # 1. 시리얼 통신을 전담할 단일 인스턴스를 생성합니다.
+        self.communicator = SerialCommunicator(port=serial_port, baud_rate=baud_rate, mock_mode=mock_mode)
+        # 2. 생성된 communicator를 각 컨트롤러에 주입합니다.
+        self.speed_controller = SpeedController(communicator=self.communicator, mock_mode=mock_mode)
+        self.power_controller = PowerController(communicator=self.communicator, mock_mode=mock_mode)
         self.alert_controller = AlertController(mock_mode=mock_mode)
+
+        # 최종 하드웨어 연결 상태를 요약하여 로깅합니다.
+        if not self.communicator.mock_mode:
+            logger.success("하드웨어 제어 모드가 활성화되었습니다 (모의 모드 OFF).")
+        else:
+            logger.warning("하드웨어 제어가 비활성화되었습니다 (모의 모드 ON).")
+
         logger.info("ControlFacade 초기화 완료.")
 
     def execute_actions(self, actions: List[Dict[str, Any]]):
@@ -37,12 +47,13 @@ class ControlFacade:
 
             logger.debug(f"Executing action: {action_type} with reason: {reason}")
 
-            if action_type == "POWER_ON":
-                self.power_controller.turn_on(reason)
-                self.speed_controller.resume_full_speed(reason)
-            elif action_type == "POWER_OFF":
-                self.power_controller.turn_off(reason)
+            # Action 타입을 보고 적절한 컨트롤러의 메소드를 호출합니다.
+            if action_type == "STOP_POWER" or action_type == "PREVENT_POWER_ON" or action_type == "POWER_OFF":
+                # 2중 안전 장치: 릴레이 전원과 모터 속도를 모두 차단합니다.
+                self.power_controller.power_off(reason)
                 self.speed_controller.stop_conveyor(reason)
+            elif action_type == "POWER_ON": # API 등 외부 요청을 위한 액션
+                self.power_controller.power_on(reason)
             elif action_type == "REDUCE_SPEED_50":
                 self.speed_controller.slow_down_50_percent(reason)
             elif action_type == "RESUME_FULL_SPEED":
@@ -71,8 +82,8 @@ class ControlFacade:
 
         # API 응답 모델(SystemStatusResponse)에 맞게 키 이름을 통일합니다.
         statuses = {
-            "conveyor_is_on": power_status.get("conveyor_is_on"),
+            "conveyor_is_on": power_status.get("is_power_on"),
             "conveyor_speed": speed_status.get("current_speed_percent"),
-            **alert_status # alert_status의 모든 키-값을 추가
+            "is_alert_on": alert_status.get("is_alert_on"),
         }
         return statuses
