@@ -12,15 +12,16 @@ from server.services.db_service import DBService
 class ControlFacade:
     """
     물리적 장치 제어를 위한 통합 인터페이스(Facade).
-    각 컨트롤러의 인스턴스를 소유하고 관리합니다.
+    이제 SerialCommunicator의 생성과 생명주기를 책임집니다.
     """
     def __init__(self, mock_mode: bool = True, serial_port: str = 'COM9', baud_rate: int = 9600):
-        # 1. 시리얼 통신을 전담할 단일 인스턴스를 생성합니다.
+        # 1. 시리얼 통신을 전담할 단일 인스턴스를 생성하고 소유합니다.
         self.communicator = SerialCommunicator(port=serial_port, baud_rate=baud_rate, mock_mode=mock_mode)
-        # 2. 생성된 communicator를 각 컨트롤러에 주입합니다.
-        self.speed_controller = SpeedController(communicator=self.communicator, mock_mode=mock_mode)
-        self.power_controller = PowerController(communicator=self.communicator, mock_mode=mock_mode)
-        self.alert_controller = AlertController(mock_mode=mock_mode)
+        
+        # 2. 생성된 communicator를 각 하위 컨트롤러에 주입합니다.
+        self.speed_controller = SpeedController(communicator=self.communicator, mock_mode=self.communicator.mock_mode)
+        self.power_controller = PowerController(communicator=self.communicator, mock_mode=self.communicator.mock_mode)
+        self.alert_controller = AlertController(mock_mode=self.communicator.mock_mode)
 
         # 최종 하드웨어 연결 상태를 요약하여 로깅합니다.
         if not self.communicator.mock_mode:
@@ -29,6 +30,10 @@ class ControlFacade:
             logger.warning("하드웨어 제어가 비활성화되었습니다 (모의 모드 ON).")
 
         logger.info("ControlFacade 초기화 완료.")
+
+    def get_communicator(self) -> SerialCommunicator:
+        """소유하고 있는 SerialCommunicator의 참조를 반환합니다."""
+        return self.communicator
 
     def execute_actions(self, actions: List[Dict[str, Any]]):
         """
@@ -87,3 +92,9 @@ class ControlFacade:
             "is_alert_on": alert_status.get("is_alert_on"),
         }
         return statuses
+
+    def release(self):
+        """ControlFacade와 모든 하위 컨트롤러의 리소스를 해제합니다."""
+        logger.info("ControlFacade 리소스를 해제합니다...")
+        self.communicator.close() # SerialCommunicator의 연결을 닫습니다.
+        logger.info("ControlFacade 리소스 해제 완료.")
