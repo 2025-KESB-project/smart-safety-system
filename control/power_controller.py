@@ -19,22 +19,22 @@ class PowerController:
 
     def power_on(self, reason: str = "System start"):
         """
-        릴레이를 켜서 컨베이어 시스템에 전원을 공급합니다.
+        릴레이를 꺼서 컨베이어 시스템에 전원을 공급합니다.
         """
         if not self._is_power_on:
             logger.success(f"전원 공급 시작. 이유: {reason}")
-            self.communicator.send_command("p1")
+            self.communicator.send_command("p0")
             self._is_power_on = True
         else:
             logger.info("이미 전원이 공급된 상태입니다.")
 
     def power_off(self, reason: str = "System stop"):
         """
-        릴레이를 꺼서 컨베이어 시스템의 전원을 차단합니다. (LOTO)
+        릴레이를 켜서 컨베이어 시스템의 전원을 차단합니다. (LOTO)
         """
         if self._is_power_on:
             logger.warning(f"전원 공급 차단. 이유: {reason}")
-            self.communicator.send_command("p0")
+            self.communicator.send_command("p1")
             self._is_power_on = False
         else:
             logger.info("이미 전원이 차단된 상태입니다.")
