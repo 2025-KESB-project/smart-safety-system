@@ -57,12 +57,27 @@ class SerialCommunicator:
             full_command = f"{command}\n"
             self.serial.write(full_command.encode('utf-8'))
             logger.debug(f"시리얼 명령어 전송: {command}")
-            # time.sleep(0.05) # 응답을 기다릴 경우 필요
         except serial.SerialException as e:
             logger.error(f"명령어 전송 중 오류 발생: {e}")
             self._initialize_serial() # 연결 재시도
 
-    def release(self):
+    def read_line(self) -> Optional[str]:
+        """아두이노로부터 한 줄의 데이터를 읽어 반환합니다."""
+        if self.mock_mode or not self.serial or not self.serial.is_open:
+            return None
+
+        try:
+            if self.serial.in_waiting > 0:
+                line = self.serial.readline().decode('utf-8').strip()
+                if line:
+                    logger.success(f"[SerialIO] 데이터 수신: {line}")
+                    return line
+        except serial.SerialException as e:
+            logger.error(f"데이터 수신 중 오류 발생: {e}")
+            self._initialize_serial() # 연결 재시도
+        return None
+
+    def close(self):
         """시리얼 포트 연결을 해제합니다."""
         if self.serial and self.serial.is_open:
             self.serial.close()
