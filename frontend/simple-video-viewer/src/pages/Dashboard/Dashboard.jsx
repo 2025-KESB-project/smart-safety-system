@@ -13,6 +13,7 @@ import ZoneConfigPanel from './ZoneConfigPanel';
 // --- 훅 및 스토어 임포트 ---
 import { useWebSocket } from '../../hooks/useWebSocket';
 import useDashboardStore from '../../store/useDashboardStore';
+import { zoneAPI } from '../../services/api'; // zoneAPI 임포트
 
 import './Dashboard.css';
 
@@ -80,60 +81,52 @@ export default function Dashboard() {
   // --- 위험 구역 관련 핸들러 함수들 (추후 별도 훅으로 분리 가능) ---
 
   const handleCreateZone = async () => {
-    const id = `zone_${Date.now()}`;
-    const name = newZoneName.trim() || `Zone ${zones.length + 1}`;
-    const pts = selectedZone.map(r => ({
-      x: Math.round(r.xRatio * (imageSize?.naturalWidth || 800)),
-      y: Math.round(r.yRatio * (imageSize?.naturalHeight || 600)),
-    }));
-    const payload = { id, zone_data: { name, points: pts } };
-    const res = await fetch('/api/zones/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      setPopupError('위험 구역 생성 실패');
-      return;
+    try {
+      const id = `zone_${Date.now()}`;
+      const name = newZoneName.trim() || `Zone ${zones.length + 1}`;
+      const pts = selectedZone.map(r => ({
+        x: Math.round(r.xRatio * (imageSize?.naturalWidth || 800)),
+        y: Math.round(r.yRatio * (imageSize?.naturalHeight || 600)),
+      }));
+      const payload = { id, zone_data: { name, points: pts } };
+      await zoneAPI.saveZones(payload); // zoneAPI 사용
+      await fetchZones();
+      setShowComplete(true);
+      setNewZoneName('');
+    } catch (err) {
+      setPopupError('위험 구역 생성 실패: ' + (err.response?.data?.detail || err.message));
     }
-    await fetchZones();
-    setShowComplete(true);
-    setNewZoneName('');
   };
 
   const handleUpdateZone = async () => {
     if (!selectedZoneId) return;
-    const existingZone = zones.find(z => z.id === selectedZoneId);
-    const pts = selectedZone.map(r => ({
-      x: Math.round(r.xRatio * (imageSize?.naturalWidth || 800)),
-      y: Math.round(r.yRatio * (imageSize?.naturalHeight || 600)),
-    }));
-    const payload = { name: existingZone?.name || '', points: pts };
-    const res = await fetch(`/api/zones/${selectedZoneId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      setPopupError('위험 구역 업데이트 실패');
-      return;
+    try {
+      const existingZone = zones.find(z => z.id === selectedZoneId);
+      const pts = selectedZone.map(r => ({
+        x: Math.round(r.xRatio * (imageSize?.naturalWidth || 800)),
+        y: Math.round(r.yRatio * (imageSize?.naturalHeight || 600)),
+      }));
+      const payload = { name: existingZone?.name || '', points: pts };
+      await zoneAPI.updateZone(selectedZoneId, payload); // zoneAPI 사용 (updateZone은 아직 미구현)
+      await fetchZones();
+      setShowComplete(true);
+    } catch (err) {
+      setPopupError('위험 구역 업데이트 실패: ' + (err.response?.data?.detail || err.message));
     }
-    await fetchZones();
-    setShowComplete(true);
   };
 
   const handleDeleteZone = async () => {
     if (!selectedZoneId) return;
     const targetName = zones.find(z => z.id === selectedZoneId)?.name || '선택된 구역';
     if (!window.confirm(`${targetName}을 삭제하시겠습니까?`)) return;
-    const res = await fetch(`/api/zones/${selectedZoneId}`, { method: 'DELETE' });
-    if (!res.ok) {
-      setPopupError('위험 구역 삭제 실패');
-      return;
+    try {
+      await zoneAPI.deleteZone(selectedZoneId); // zoneAPI 사용 (deleteZone은 아직 미구현)
+      setSelectedZoneId(null);
+      await fetchZones();
+      setShowComplete(true);
+    } catch (err) {
+      setPopupError('위험 구역 삭제 실패: ' + (err.response?.data?.detail || err.message));
     }
-    setSelectedZoneId(null);
-    await fetchZones();
-    setShowComplete(true);
   };
 
   const handleDangerComplete = (ratioPoints) => {
