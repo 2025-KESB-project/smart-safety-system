@@ -8,18 +8,18 @@ import { LogOut } from 'lucide-react';
 import LiveStreamContent from './LiveStreamContent';
 import VideoLogTable from './VideoLogTable';
 import DangerZoneSelector from './DangerZoneSelector';
-import ConveyorMode from './ConveyorMode';
-import ZoneConfigPanel from './ZoneConfigPanel';
+import ConveyorMode       from './ConveyorMode';
+import ZoneConfigPanel    from './ZoneConfigPanel';
 
-// --- 훅 및 스토어 임포트 ---
+// ⭐️ WebSocket 훅 임포트
 import { useWebSocket } from '../../hooks/useWebSocket';
 import useDashboardStore from '../../store/useDashboardStore';
 import { zoneAPI } from '../../services/api'; // zoneAPI 임포트
 
 import './Dashboard.css';
-
+import './DangerZoneSelector.css';
 // ⚙️ WebSocket 서버 URL 정의
-const WS_URL = 'ws://localhost:8000/ws/logs';
+const WS_URL = 'ws://localhost:8000/ws/logs/';
 
 
 export default function Dashboard() {
@@ -29,7 +29,9 @@ export default function Dashboard() {
     fetchLogs, fetchZones, addLog, handleControl, setPopupError
   } = useDashboardStore();
 
-  // 2. Dashboard 컴포넌트 자체에서 관리해야 하는 UI 상태들
+  // ─── 공통 상태 관리 ─────────────────────────────────
+  // (로그아웃 모달, 완료 메시지, 안내 메시지, 현재 시간, 이벤트 로그, 컨베이어 상태 등)
+  // — 상태
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [currentTime,    setCurrentTime]    = useState('');
   const [logs,           setLogs]           = useState([]);
@@ -56,41 +58,52 @@ export default function Dashboard() {
   const [selectedZoneId,  setSelectedZoneId]  = useState(null);
   const [selectedZone,    setSelectedZone]    = useState([]);
   const [newZoneName,     setNewZoneName]     = useState('');  // 사용자 입력 구역 이름 상태
+  const [imageSize,       setImageSize]       = useState(null);  // 이미지 크기 정보
 
   // 비디오 스트림 크기 참조 (영역 좌표 계산에 사용)
   const liveStreamRef = useRef(null);
 
-  // 3. 웹소켓 설정: 메시지를 받으면 스토어의 addLog 액션을 호출합니다.
-  const handleWsMessage = useCallback((msg) => {
-    if (msg && msg.event_type) {
-      addLog(msg);
+
+      // ─── WebSocket 메시지 처리 콜백 ─────────────────────
+  /*const handleWsMessage = useCallback((msg) => {
+    if (msg && msg.id) {
+      setLogs(prev => [...prev, msg]);
     }
-  }, [addLog]);
+  }, []);
 
-  const { status: wsStatus, error: wsError } = useWebSocket(WS_URL, handleWsMessage);
+  // ─── WebSocket 구독 및 상태 관리 ─────────────────────
+  const { status: wsStatus, error: wsError } = useWebSocket(
+    WS_URL,
+    handleWsMessage,
+    null,
+    5000,
+    3
+  );
+*/
 
-  // 4. 초기 데이터 로딩 (useEffect)
+  // ─── 위험구역 설정 후 안내 메시지 자동 숨김 (3초 후) ─────────────────────
   useEffect(() => {
-    fetchLogs(true); // 최초 로딩 시 로딩 인디케이터 표시
-    fetchZones();
-  }, [fetchLogs, fetchZones]);
+    if (!showInstruction) return;
+    const t = setTimeout(() => setShowInstruction(false), 3000);
+    return () => clearTimeout(t);
+  }, [showInstruction]);
 
   // 1) 현재 시간 표시
   useEffect(() => {
     const timer = setInterval(() => {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const date = String(now.getDate()).padStart(2, '0');
-      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const day = dayNames[now.getDay()];
-      let h = now.getHours();
-      const m = String(now.getMinutes()).padStart(2, '0');
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      if (h > 12) h -= 12;
-      if (h === 0) h = 12;
+      const now      = new Date();
+      const year     = now.getFullYear();
+      const month    = String(now.getMonth()+1).padStart(2,'0');
+      const date     = String(now.getDate()).padStart(2,'0');
+      const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+      const day      = dayNames[now.getDay()];
+      let   h        = now.getHours();
+      const m        = String(now.getMinutes()).padStart(2,'0');
+      const ampm     = h>=12?'PM':'AM';
+      if (h>12) h -= 12;
+      if (h===0) h = 12;
       setCurrentTime(`${year}-${month}-${date} (${day}) / ${ampm}-${h}:${m}`);
-    }, 1000);
+    },1000);
     return () => clearInterval(timer);
   },[]);
 
@@ -102,6 +115,7 @@ export default function Dashboard() {
       const res = await fetch('http://localhost:8000/api/logs?limit=50');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      console.log('API logs:', data); //디테일 내용
       setLogs(data);
       if (data.length) setActiveId(data[0].id);
     } catch(e) {
@@ -152,28 +166,33 @@ export default function Dashboard() {
     }
   };
 
-  const handleStartAutomatic = () => handleControl('http://localhost:8000/api/control/start_automatic');
-  const handleStartMaintenance = () => handleControl('http://localhost:8000/api/control/start_maintenance');
-  const handleStop = async () => {
-    setControlLoading(true);
-    try {
-      const res = await fetch('http://localhost:8000/api/control/stop', { method: 'POST' });
-      if (!res.ok) throw new Error(res.status);
-      await fetchConveyorStatus();
-    } catch {
-      alert('컨베이어 정지 실패');
-    } finally {
-      setControlLoading(false);
+
+  const handleStartAutomatic = async () => {
+    // 위험 이벤트(구역 침입 or 낙상) 확인
+    if (logs.some(l => l.event_type === 'zone_intrusion' || l.event_type === 'fall')) {
+      setPopupError(
+        '⚠️ 위험 구역에 인원 감지 또는 낙상이 감지되어\n운전 모드로 전환할 수 없습니다.'
+      );
+      setTimeout(() => setPopupError(null), 3000);
+      return;
     }
+    await fetchLogs(false);
+    await handleControl('http://localhost:8000/api/control/start_automatic');
   };
 
-  // ─── 6) 위험 구역 CRUD API ────────────────────────────────────────────────
-  // 6-1) 조회 (GET /api/zones/)
+  const handleStartMaintenance = async () => {
+    await handleControl('http://localhost:8000/api/control/start_maintenance');
+  };
+  const handleStop = async () => {
+    await handleControl('http://localhost:8000/api/control/stop');
+  };
+
+  // 6-1) 위험 구역 목록 조회
   const fetchZones = useCallback(async () => {
     try {
-      const res  = await fetch('http://localhost:8000/api/zones/', { method: 'GET' });
+      const res  = await fetch('http://localhost:8000/api/zones/');
       if (!res.ok) throw new Error(res.status);
-      const data = await res.json(); // [{ id, name, points:[{x,y},…] }, …]
+      const data = await res.json();
       setZones(data);
     } catch (e) {
       console.error('구역 조회 실패', e);
@@ -183,132 +202,126 @@ export default function Dashboard() {
     if (!isDangerMode) fetchZones();
   }, [isDangerMode, fetchZones]);
 
-  // 6-2) 생성 (POST /api/zones/)
+  // 6-2) 위험 구역 생성 (사용자 입력 이름 우선 반영)
   const handleCreateZone = async () => {
-    // ① 새 ID/이름 생성
-    const id   = `zone_${Date.now()}`;
-    const name = `Zone ${zones.length + 1}`;
+    const id = `zone_${Date.now()}`;
+    let autoName;
+    try {
+      const resCount = await fetch('http://localhost:8000/api/zones/');
+      if (!resCount.ok) throw new Error(resCount.status);
+      const existing = await resCount.json();
+      autoName = `Zone ${existing.length + 1}`;
+    } catch {
+      autoName = `Zone ${zones.length + 1}`;
+    }
+    const name = newZoneName.trim() || autoName;  // 사용자 입력값 우선 사용
 
-    // ② live-stream-wrapper 사이즈 측정
-    const rect = liveStreamRef.current.getBoundingClientRect();
-
-    // ③ normalized → pixel, 정수로 변환
-    const intPoints = selectedZone.map(p => ({
-      x: Math.round(p.xRatio * rect.width),
-      y: Math.round(p.yRatio * rect.height)
+    // selectedZone은 비율 좌표이므로 실제 이미지 좌표로 변환
+    const pts = selectedZone.map(r => ({
+      x: Math.round(r.xRatio * (imageSize?.naturalWidth || 800)),
+      y: Math.round(r.yRatio * (imageSize?.naturalHeight || 600)),
     }));
 
-    // ④ API 스펙에 맞춘 payload
-    const payload = {
-      id,
-      zone_data: {
-        name,
-        points: intPoints
-      }
-    };
-
-    console.log('▶️ POST payload:', payload);
+    const payload = { id, zone_data: { name, points: pts } };
     const res = await fetch('http://localhost:8000/api/zones/', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload)
+      body:    JSON.stringify(payload),
     });
     if (!res.ok) {
-      console.error('❌ 생성 실패:', await res.text());
-      alert('위험 구역 생성에 실패했습니다.');
+      alert('위험 구역 생성 실패');
       return;
     }
-    alert('✅ 새로운 위험 구역이 생성되었습니다!');
     await fetchZones();
+    setShowComplete(true);
+    setNewZoneName('');  // 입력창 초기화
   };
 
-  // 6-3) 업데이트 (PUT /api/zones/{zone_id})
+  // 6-3) 위험 구역 수정 (기존 이름 재조회 후 PUT)
   const handleUpdateZone = async () => {
     if (!selectedZoneId) return;
-    // 기존 이름 꺼내오기
-    const existing = zones.find(z => z.id === selectedZoneId) || {};
+    let existingName = '';
+    try {
+      const resList = await fetch('http://localhost:8000/api/zones/');
+      if (!resList.ok) throw new Error(resList.status);
+      const list = await resList.json();
+      existingName = list.find(z => z.id === selectedZoneId)?.name || '';
+    } catch {
+      existingName = zones.find(z => z.id === selectedZoneId)?.name || '';
+    }
 
-    // live-stream-wrapper 사이즈 재측정
-    const rect = liveStreamRef.current.getBoundingClientRect();
-    const intPoints = selectedZone.map(p => ({
-      x: Math.round(p.xRatio * rect.width),
-      y: Math.round(p.yRatio * rect.height)
+    // selectedZone은 비율 좌표이므로 실제 이미지 좌표로 변환
+    const pts = selectedZone.map(r => ({
+      x: Math.round(r.xRatio * (imageSize?.naturalWidth || 800)),
+      y: Math.round(r.yRatio * (imageSize?.naturalHeight || 600)),
     }));
 
-    const payload = {
-      zone_data: {
-        name:   existing.name,
-        points: intPoints
-      }
-    };
-
-    console.log(`▶️ PUT payload:`, payload);
-    const res = await fetch(
-      `http://localhost:8000/api/zones/${selectedZoneId}`,
-      {
-        method:  'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(payload)
-      }
-    );
+    const payload = { name: existingName, points: pts };
+    const res = await fetch(`http://localhost:8000/api/zones/${selectedZoneId}`, {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
     if (!res.ok) {
-      console.error('❌ 업데이트 실패:', await res.text());
-      alert('위험 구역 업데이트에 실패했습니다.');
+      alert('위험 구역 업데이트 실패');
       return;
     }
-    alert('✅ 위험 구역이 업데이트되었습니다!');
     await fetchZones();
+    setShowComplete(true);
   };
 
-  // 6-4) 삭제 (DELETE /api/zones/{zone_id})
+  // 6-4) 위험 구역 삭제 (확인 다이얼로그에 zone 이름 표시)
   const handleDeleteZone = async () => {
     if (!selectedZoneId) return;
-    if (!window.confirm('선택된 위험 구역을 삭제하시겠습니까?')) return;
-
-    console.log(`▶️ DELETE zone ${selectedZoneId}`);
-    const res = await fetch(
-      `http://localhost:8000/api/zones/${selectedZoneId}`,
-      { method: 'DELETE' }
-    );
+    let targetName = '';
+    try {
+      const resList = await fetch('http://localhost:8000/api/zones/');
+      if (!resList.ok) throw new Error(resList.status);
+      const list = await resList.json();
+      targetName = list.find(z => z.id === selectedZoneId)?.name || '';
+    } catch {
+      console.warn('삭제 전 서버 재조회 실패');
+    }
+    const displayName = targetName || '선택된 구역';
+    if (!window.confirm(`${displayName}을 삭제하시겠습니까?`)) return;
+    const res = await fetch(`http://localhost:8000/api/zones/${selectedZoneId}`, { method: 'DELETE' });
     if (!res.ok) {
-      console.error('❌ 삭제 실패:', await res.text());
-      alert('위험 구역 삭제에 실패했습니다.');
+      alert('위험 구역 삭제 실패');
       return;
     }
-    alert('✅ 위험 구역이 삭제되었습니다!');
     setSelectedZoneId(null);
     await fetchZones();
+    setShowComplete(true);
   };
 
-  // 7) 위험 모드 진입
+  // 7) 위험 구역 설정 모드 진입
   const startDangerMode = () => {
     setIsDangerMode(true);
     setConfigAction(null);
     setShowInstruction(false);
   };
 
-  // 8) DangerZoneSelector 완료
-  const handleDangerComplete = ratios => {
-    setSelectedZone(ratios);
+  // 8) DangerZoneSelector에서 비율 좌표를 받아서 저장
+  const handleDangerComplete = ratioPoints => {
+    // DangerZoneSelector에서 이미 비율로 변환된 좌표를 받음
+    setSelectedZone(ratioPoints);
+    setShowInstruction(configAction === 'create');
   };
 
-  // — 3) 로그아웃 처리
-  const handleLogoutConfirm = () => {
-    setShowLogoutModal(false);
-    navigate('/login');
+  // 8-1) 이미지 크기 정보 저장
+  const handleImageLoad = (sizeInfo) => {
+    setImageSize(sizeInfo);
   };
 
-  // — 4) 위험 구역 설정 시작
-  const startDangerMode = () => {
-    setIsDangerMode(true);
-    setShowInstruction(true);
-    setTimeout(() => setShowInstruction(false), 3000);
+  // 9) ZoneConfigPanel 액션(조회/생성/수정/삭제) 선택
+  const handleActionSelect = action => {
+    setConfigAction(action);
+    if (action === 'create') setNewZoneName('');  // 생성 모드 시 이름 초기화
+    if (action !== 'view') setZones([]);
+    setShowInstruction(action === 'create');
   };
 
-  // — 5) 위험 구역 설정 완료
-  const handleDangerComplete = coords => {
-    setSelectedZone(coords);
-  // 9) 생성/업데이트 확정
+  // 10) 생성/수정/삭제 확정
   const handleConfirm = async () => {
     if (configAction === 'create') await handleCreateZone();
     if (configAction === 'update') await handleUpdateZone();
@@ -326,13 +339,6 @@ export default function Dashboard() {
     return () => clearTimeout(t);
   }, [showComplete]);
 
-  // 로그아웃 처리
-  const handleLogoutConfirm = () => {
-    setShowLogoutModal(false);
-    navigate('/login');
-  };
-
-
   return (
     <div className="dashboard">
       {/* 헤더 */}
@@ -347,34 +353,35 @@ export default function Dashboard() {
       </div>
 
       {/* WebSocket 연결 상태 표시 */}
-      {/*<div className="ws-status">
+      <div className="ws-status">
         {wsStatus === 'connecting' && '🔄 연결 중...'}
         {wsStatus === 'open'       && '✅ 연결됨'}
         {wsStatus === 'closed'     && '⛔ 연결 끊김'}
         {wsStatus === 'error'      && `❌ 오류 발생: ${wsError?.message}`}
-      </div>*/}
+      </div>
 
       {/* Main */}
       <div className="main-layout">
         {/* 왼쪽: 비디오 스트림 + 선택도구 + 오버레이 */}
         <div className="left-panel">
-          <div className="live-stream-wrapper" ref={liveStreamRef}>
-            {isDangerMode && (configAction==='create'||configAction==='update')
-              ? (
-                <DangerZoneSelector
-                  eventId={activeId}
-                  onComplete={handleDangerComplete}
-                />
-              ) : (
-                <LiveStreamContent eventId={activeId} />
-              )
-            }
-
-            {/* 안내 메시지 */}
-            {isDangerMode && configAction==='create' && showInstruction && (
-              <div className="center-message">
-                ⚠️ 클릭하여 점을 찍어 위험 구역을 생성하세요!
-              </div>
+          <div className="live-stream-wrapper">
+            {isDangerMode ? (
+              <DangerZoneSelector onComplete={handleDangerComplete}/>
+          <div
+            className="live-stream-wrapper"
+            ref={liveStreamRef}
+            style={{ position: 'relative' }}
+          >
+            {isDangerMode && (configAction === 'create' || configAction === 'update') ? (
+              <DangerZoneSelector onComplete={handleDangerComplete} />
+            ) : (
+              <>
+                <LiveStreamContent/>
+                {selectedZone.length > 0 && (
+                  <ZoneOverlay coords={selectedZone}/>
+                )}
+              </>
+              <LiveStreamContent eventId={activeId} />
             )}
 
             {/* 완료 메시지 */}
@@ -417,22 +424,6 @@ export default function Dashboard() {
             onStop={handleStop}
             onDangerMode={startDangerMode}
           />
-          {!isDangerMode ? (
-            <>
-              {loading && !logs.length ? (
-                <div className="loading">로그 불러오는 중...</div>
-              ) : error ? (
-                <div className="error">{error}</div>
-              ) : (
-                <VideoLogTable logs={logs} activeId={activeId} onSelect={setActiveId} />
-              )}
-              <ConveyorMode
-                isOperating={isOperating}
-                loading={controlLoading}
-                onStart={handleStart}
-                onStop={handleStop}
-                onDangerMode={startDangerMode}
-              />
             </>
           ) : (
             <>
@@ -446,7 +437,7 @@ export default function Dashboard() {
                 onCancel={() => setIsDangerMode(false)}
               />
               {configAction==='create' && (
-                <>  {/* 생성 모드에만 입력창 및 버튼 */}
+                <div className="zone-input-container">
                   <input
                     type="text"
                     placeholder="구역 이름을 입력하세요"
@@ -455,7 +446,7 @@ export default function Dashboard() {
                     className="zone-name-input"
                   />
                   <button className="confirm-btn" onClick={handleConfirm}>생성 완료</button>
-                </>
+                </div>
               )}
               {configAction==='update' && (
                 <button className="confirm-btn" onClick={handleConfirm}>업데이트 완료</button>
@@ -474,7 +465,7 @@ export default function Dashboard() {
         <div className="error-popup-overlay">
           <div className="error-popup">
             <div className="error-popup-header">
-              <span>⚠️ 작업 실패</span>
+              <span>⚠️ 작업 실패 ⚠️</span>
               <button onClick={() => setPopupError(null)}>&times;</button>
             </div>
             <div className="error-popup-content">
@@ -500,12 +491,7 @@ export default function Dashboard() {
   );
 }
 
-// 설정된 위험 구역을 계속 표시하는 오버레이
-function ZoneOverlay({ coords }) {
-  const ref = React.useRef(null);
-
-  React.useEffect(() => {
-// ZoneOverlay: 비율 좌표 → 픽셀 오버레이
+// ZoneOverlay: 캔버스에 위험 구역 폴리곤을 그리는 컴포넌트
 function ZoneOverlay({ ratios }) {
   const ref = useRef(null);
   useEffect(() => {
@@ -513,22 +499,17 @@ function ZoneOverlay({ ratios }) {
     const ctx    = canvas.getContext('2d');
     const rect   = canvas.getBoundingClientRect();
     const dpr    = window.devicePixelRatio || 1;
-
-    canvas.width  = rect.width  * dpr;
     canvas.width  = rect.width  * dpr;
     canvas.height = rect.height * dpr;
     ctx.scale(dpr, dpr);
-
-    ctx.clearRect(0, 0, rect.width, rect.height);
-    if (coords.length < 3) return;
-
+    ctx.clearRect(0,0,rect.width,rect.height);
     if (!ratios || ratios.length < 3) return;
     const pts = ratios.map(p => ({
       x: p.xRatio * rect.width,
       y: p.yRatio * rect.height
     }));
-    ctx.fillStyle   = 'rgba(255,0,0,0.2)';
-    ctx.strokeStyle = 'rgba(255,0,0,0.8)';
+    ctx.fillStyle   = 'rgba(0,255,0,0.2)';
+    ctx.strokeStyle = 'rgba(0,255,0,0.8)';
     ctx.lineWidth   = 2;
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
