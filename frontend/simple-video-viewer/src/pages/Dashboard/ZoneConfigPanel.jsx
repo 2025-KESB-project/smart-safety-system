@@ -2,7 +2,7 @@ import React from 'react';
 import './ZoneConfigPanel.css';
 
 export default function ZoneConfigPanel({
-  zones = [],            // 기본 빈 배열
+  zones = [],
   selected,
   onSelect,
   currentAction,
@@ -70,6 +70,3 @@ export default function ZoneConfigPanel({
           )}
         </ul>
       )}
-    </div>
-  );
-}

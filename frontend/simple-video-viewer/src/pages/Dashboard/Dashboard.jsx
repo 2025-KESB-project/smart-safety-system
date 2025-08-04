@@ -53,7 +53,7 @@ export default function Dashboard() {
 
   // 비디오 스트림 크기 참조 (영역 좌표 계산에 사용)
   const liveStreamRef = useRef(null);
-  
+
 
       // ─── WebSocket 메시지 처리 콜백 ─────────────────────
   const handleWsMessage = useCallback((msg) => {
@@ -206,13 +206,13 @@ export default function Dashboard() {
       autoName = `Zone ${zones.length + 1}`;
     }
     const name = newZoneName.trim() || autoName;  // 사용자 입력값 우선 사용
-    
+
     // selectedZone은 비율 좌표이므로 실제 이미지 좌표로 변환
     const pts = selectedZone.map(r => ({
       x: Math.round(r.xRatio * (imageSize?.naturalWidth || 800)),
       y: Math.round(r.yRatio * (imageSize?.naturalHeight || 600)),
     }));
-    
+
     const payload = { id, zone_data: { name, points: pts } };
     const res = await fetch('http://localhost:8000/api/zones/', {
       method:  'POST',
@@ -223,6 +223,7 @@ export default function Dashboard() {
       alert('위험 구역 생성 실패');
       return;
     }
+    alert('✅ 새로운 위험 구역이 생성되었습니다!');
     await fetchZones();
     setShowComplete(true);
     setNewZoneName('');  // 입력창 초기화
@@ -240,13 +241,13 @@ export default function Dashboard() {
     } catch {
       existingName = zones.find(z => z.id === selectedZoneId)?.name || '';
     }
-    
+
     // selectedZone은 비율 좌표이므로 실제 이미지 좌표로 변환
     const pts = selectedZone.map(r => ({
       x: Math.round(r.xRatio * (imageSize?.naturalWidth || 800)),
       y: Math.round(r.yRatio * (imageSize?.naturalHeight || 600)),
     }));
-    
+
     const payload = { name: existingName, points: pts };
     const res = await fetch(`http://localhost:8000/api/zones/${selectedZoneId}`, {
       method:  'PUT',
@@ -323,7 +324,7 @@ export default function Dashboard() {
     setIsDangerMode(false);
   };
 
-  // 11) 완료 메시지 자동 숨김 (3초 후)
+  // 10) 완료 메시지 자동 숨김(3초후)
   useEffect(() => {
     if (!showComplete) return;
     const t = setTimeout(() => setShowComplete(false), 3000);
