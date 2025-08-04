@@ -8,7 +8,7 @@ const EVENT_LABEL = {
   LOG_CRITICAL_SENSOR:    '센서 경고',
   LOG_INTRUSION_SLOWDOWN: '위험 구역 침입',
   LOG_CROUCHING_WARN:     '웅크린 자세 감지',
-  LOG_LOTO_ACTIVE:        'LOTO 모드 침입',
+  LOG_LOTO_ACTIVE:        '위험구역 침입',
   LOG_MAINTENANCE_SAFE:   '정비 모드 안전',
   LOG_NORMAL_OPERATION:   '안전',
   // 필요하면 여기 더 추가...

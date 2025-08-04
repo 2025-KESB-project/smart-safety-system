@@ -381,3 +381,56 @@ html, body {
   flex: 1 1 auto;
   overflow-y: auto;
 }
+/* 팝업 오버레이: 화면 전체 중앙 고정, 반투명 백그라운드 */
+.error-popup-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.4);
+  z-index: 9999;
+}
+
+/* 팝업 컨테이너 */
+.error-popup {
+  background: #fff;
+  border-radius: 10px;
+  overflow: hidden;
+  max-width: 480px;
+  width: 95%;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* 헤더: 레드 배경, 텍스트 중앙 정렬, 닫기 버튼 위치 */
+.error-popup-header {
+  position: relative;
+  background: #e74c3c;
+  color: #fff;
+  text-align: center;
+  padding: 20px 100px 20px;
+  font-size: 30px;
+  font-weight: bold;
+}
+.error-popup-header button {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  font-size: 60px;
+  color: #fff;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* 팝업 본문: 화이트 배경, 다크 텍스트 */
+.error-popup-content {
+  background: #fff;
+  color: #333;
+  padding: 20px 100px 20px;
+  font-size: 20px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
