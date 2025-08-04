@@ -15,7 +15,7 @@ import { useWebSocket } from '../../hooks/useWebSocket';
 import './Dashboard.css';
 import './DangerZoneSelector.css';
 // ⚙️ WebSocket 서버 URL 정의
-const WS_URL = 'ws://localhost:8000/ws/logs/';
+const WS_URL = 'ws://localhost:8000/ws/logs';
 
 
 export default function Dashboard() {
