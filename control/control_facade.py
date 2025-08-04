@@ -14,7 +14,7 @@ class ControlFacade:
     물리적 장치 제어를 위한 통합 인터페이스(Facade).
     각 컨트롤러의 인스턴스를 소유하고 관리합니다.
     """
-    def __init__(self, mock_mode: bool = True, serial_port: str = '/dev/cu.usbmodem1101', baud_rate: int = 9600):
+    def __init__(self, mock_mode: bool = False, serial_port: str = '/dev/cu.usbserial-A5069RR4', baud_rate: int = 9600):
         # 1. 시리얼 통신을 전담할 단일 인스턴스를 생성합니다.
         self.communicator = SerialCommunicator(port=serial_port, baud_rate=baud_rate, mock_mode=mock_mode)
         # 2. 생성된 communicator를 각 컨트롤러에 주입합니다.

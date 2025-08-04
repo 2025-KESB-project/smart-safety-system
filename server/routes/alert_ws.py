@@ -7,7 +7,7 @@ from server.dependencies import get_websocket_service # 새로운 의존성 주�
 
 router = APIRouter()
 
-@router.websocket("/ws/alerts")
+@router.websocket("/alerts")
 async def websocket_endpoint(
     websocket: WebSocket, 
     websocket_service: WebSocketService = Depends(get_websocket_service)

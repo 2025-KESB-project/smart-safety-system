@@ -9,7 +9,7 @@ class SerialCommunicator:
     SpeedController와 PowerController가 이 클래스의 인스턴스를 공유하여 사용합니다.
     """
 
-    def __init__(self, port: str, baud_rate: int, mock_mode: bool = True):
+    def __init__(self, port: str, baud_rate: int, mock_mode: bool = False):
         self.port = port
         self.baud_rate = baud_rate
         self.mock_mode = mock_mode
