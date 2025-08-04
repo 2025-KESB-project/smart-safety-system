@@ -232,6 +232,7 @@ export default function Dashboard() {
       alert('위험 구역 생성 실패');
       return;
     }
+    alert('✅ 새로운 위험 구역이 생성되었습니다!');
     await fetchZones();
     setShowComplete(true);
     setNewZoneName('');  // 입력창 초기화
@@ -332,7 +333,7 @@ export default function Dashboard() {
     setIsDangerMode(false);
   };
 
-  // 11) 완료 메시지 자동 숨김 (3초 후)
+  // 10) 완료 메시지 자동 숨김(3초후)
   useEffect(() => {
     if (!showComplete) return;
     const t = setTimeout(() => setShowComplete(false), 3000);
