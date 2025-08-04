@@ -53,6 +53,7 @@ export default function Dashboard() {
 
   // 비디오 스트림 크기 참조 (영역 좌표 계산에 사용)
   const liveStreamRef = useRef(null);
+  
 
 
       // ─── WebSocket 메시지 처리 콜백 ─────────────────────

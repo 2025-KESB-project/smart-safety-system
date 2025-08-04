@@ -34,14 +34,30 @@
 .log-board thead {
   background-color: #f3f4f6;
 }
-.log-board th,
+/* 2) 날짜(일시) 컬럼을 넉넉히, 줄바꿈도 허용해 줍니다 */
+.log-board th:nth-child(1),
+.log-board td.date-cell {
+  width: 220px;           /* 필요에 따라 px 값 조정하세요 */
+  white-space: normal;    /* 긴 일시는 줄바꿈 */
+}
+/* 3) 감지 인원·이유 컬럼은 auto 너비 */
+.log-board th:nth-child(2),
+.log-board td:nth-child(2),
+.log-board th:nth-child(3),
+.log-board td:nth-child(3) {
+  width: auto;
+}
+/* 4) 위험도 컬럼(색 블록)만 작게 고정 */
+.log-board th:nth-child(4),
+.log-board td.risk-cell {
+  width: 40px;            /* 블록 하나 보일 정도로만 */
+  padding: 0;             /* 여백 최소화 */
+}
+
+/* 5) overflow 처리 (필요하다면) */
 .log-board td {
-  padding: 8px;
-  text-align: left;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  border-bottom: 1px solid #e5e7eb;
 }
 .log-board tr.active {
   background-color: #e0f2fe;
@@ -69,4 +85,17 @@
   /* 남은 세로 공간을 채우면서 스크롤 가능 */
   flex: 1 1 auto;
   overflow-y: auto;
+}
+/* tr 클래스에 따라 각 셀에 배경색을 강제 적용합니다 */
+.log-board tbody tr.status-safe td {
+  background-color: #83ff8dca !important;
+}
+.log-board tbody tr.status-medium td {
+  background-color: #e8dc4fd4 !important;
+}
+.log-board tbody tr.status-high td {
+  background-color: #ff8f4fdb !important;
+}
+.log-board tbody tr.status-critical td {
+  background-color: #e53333c4 !important;
 }
