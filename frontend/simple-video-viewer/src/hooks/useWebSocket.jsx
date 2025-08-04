@@ -36,7 +36,7 @@ export function useWebSocket(
     };
 
     ws.onmessage = (event) => {
-      console.log("5. [WS-Debug] ✉️ 메시지 수신 (onmessage)");
+      console.log("✉️ [useWebSocket] Message received:", event.data); // 디버깅 로그 추가
       try {
         const data = JSON.parse(event.data);
         onMessage(data);
@@ -83,9 +83,12 @@ export function useWebSocket(
       console.log("8. [WS-Debug] useEffect 클린업 함수 실행. 연결을 종료합니다.");
       shouldReconnect.current = false;
       clearTimeout(reconnectTimer.current);
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      // StrictMode에서 조기에 연결이 끊어지는 것을 방지하기 위해 명시적으로 close()를 호출하지 않습니다.
+      // 컴포넌트가 완전히 언마운트되면 브라우저가 연결을 정리하고 onclose 이벤트가 발생하며,
+      // shouldReconnect 플래그에 따라 재연결이 방지됩니다.
+      // if (wsRef.current) {
+      //   wsRef.current.close();
+      // }
     };
   }, [connect]);
 

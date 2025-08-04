@@ -1,8 +1,6 @@
-import React, { useRef, useEffect } from 'react';
-import './Dashboard.css';  
+import React, { useRef } from 'react';
 
 export default function LiveStreamContent({ onImageLoad }) {
-  
   const videoStreamUrl = "http://localhost:8000/api/streaming/video_feed";
   const imgRef = useRef(null);
 

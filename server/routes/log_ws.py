@@ -12,6 +12,8 @@ async def websocket_log_endpoint(websocket: WebSocket, websocket_service: WebSoc
     실시간 이벤트 로그 스트리밍을 위한 WebSocket 엔드포인트입니다.
     클라이언트가 연결되면 WebSocketService의 로그 채널에 등록됩니다.
     """
+    await websocket.accept()
+
     channel = "logs"
     await websocket_service.connect(websocket, channel)
     try:

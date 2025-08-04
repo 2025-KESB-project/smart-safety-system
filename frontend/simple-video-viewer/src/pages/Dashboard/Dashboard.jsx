@@ -8,10 +8,10 @@ import { LogOut } from 'lucide-react';
 import LiveStreamContent from './LiveStreamContent';
 import VideoLogTable from './VideoLogTable';
 import DangerZoneSelector from './DangerZoneSelector';
-import ConveyorMode       from './ConveyorMode';
-import ZoneConfigPanel    from './ZoneConfigPanel';
+import ConveyorMode from './ConveyorMode';
+import ZoneConfigPanel from './ZoneConfigPanel';
 
-// ⭐️ WebSocket 훅 임포트
+// --- 훅 및 스토어 임포트 ---
 import { useWebSocket } from '../../hooks/useWebSocket';
 import useDashboardStore from '../../store/useDashboardStore';
 import { zoneAPI } from '../../services/api'; // zoneAPI 임포트
@@ -21,35 +21,60 @@ import './DangerZoneSelector.css';
 // ⚙️ WebSocket 서버 URL 정의
 const WS_URL = 'ws://localhost:8000/ws/logs';
 
+// --- 재사용 가능한 모달 컴포넌트들 ---
+const ErrorPopup = ({ message, onClose }) => {
+  if (!message) return null;
+  return (
+    <div className="error-popup-overlay">
+      <div className="error-popup">
+        <div className="error-popup-header">
+          <span>⚠️ 작업 실패 ⚠️</span>
+          <button onClick={onClose}>&times;</button>
+        </div>
+        <div className="error-popup-content">{message}</div>
+      </div>
+    </div>
+  );
+};
 
+const LogoutModal = ({ onConfirm, onCancel }) => (
+  <div className="logout-overlay">
+    <div className="logout-modal">
+      <div className="logout-title">로그아웃 하시겠습니까?</div>
+      <div className="logout-buttons">
+        <button className="logout-yes" onClick={onConfirm}>네</button>
+        <button className="logout-no" onClick={onCancel}>아니요</button>
+      </div>
+    </div>
+  </div>
+);
+
+// --- 메인 대시보드 컴포넌트 ---
 export default function Dashboard() {
   // 1. Zustand 스토어에서 상태와 액션을 가져옵니다.
   const {
-    logs, zones, loading, error, popupError, operationMode,
-    fetchLogs, fetchZones, addLog, handleControl, setPopupError
+    logs, zones, operationMode, loading, error, popupError,
+    activeId, isDangerMode, configAction, newZoneName, selectedZoneId, // selectedZoneId 추가
+    initialize, addLog, setActiveId, handleControl,
+    enterDangerMode, exitDangerMode, setConfigAction, setSelectedZoneId,
+    setNewZoneName, setImageSize, handleCreateZone, handleUpdateZone, handleDeleteZone,
+    setPopupError
   } = useDashboardStore();
 
-  // ─── 공통 상태 관리 ─────────────────────────────────
-  // (로그아웃 모달, 완료 메시지, 안내 메시지, 현재 시간, 이벤트 로그, 컨베이어 상태 등)
-  // — 상태
+  // 2. Dashboard 컴포넌트 자체에서 관리해야 하는 UI 상태들
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const [currentTime,    setCurrentTime]    = useState('');
-  const [logs,           setLogs]           = useState([]);
-  const [activeId,       setActiveId]       = useState(null);
-  const [loading,        setLoading]        = useState(false);
-  const [error,          setError]          = useState(null);
-  const [popupError,     setPopupError]     = useState(null);
-  const [operationMode,  setOperationMode]  = useState(null);
-  const [isOperating,     setIsOperating]     = useState(null);
-  const [controlLoading,  setControlLoading]  = useState(false);
+  const [currentTime, setCurrentTime] = useState('');
+  const [activeId, setActiveId] = useState(null);
 
-  // ─── 위험 구역 설정 모드 상태 ────────────────────────────────
-  // (위험 구역 생성/수정/삭제를 위한 모드 전환 플래그)
-  const [configAction,    setConfigAction]    = useState(null);
-  // 위험 모드 토글 & 메시지
-  const [isDangerMode,   setIsDangerMode]   = useState(false);
+  // --- 위험 구역 설정 관련 상태 ---
+  const [isDangerMode, setIsDangerMode] = useState(false);
+  const [configAction, setConfigAction] = useState(null);
+  const [selectedZoneId, setSelectedZoneId] = useState(null);
+  const [selectedZone, setSelectedZone] = useState([]);
+  const [newZoneName, setNewZoneName] = useState('');
   const [showInstruction, setShowInstruction] = useState(false);
-  const [showComplete,    setShowComplete]    = useState(false);
+  const [showComplete, setShowComplete] = useState(false);
+  const [imageSize, setImageSize] = useState(null);
 
   const navigate = useNavigate();
 
@@ -62,11 +87,11 @@ export default function Dashboard() {
 
   // 비디오 스트림 크기 참조 (영역 좌표 계산에 사용)
   const liveStreamRef = useRef(null);
-  
+
 
 
       // ─── WebSocket 메시지 처리 콜백 ─────────────────────
-  /*const handleWsMessage = useCallback((msg) => {
+  const handleWsMessage = useCallback((msg) => {
     if (msg && msg.id) {
       setLogs(prev => [...prev, msg]);
     }
@@ -80,7 +105,7 @@ export default function Dashboard() {
     5000,
     3
   );
-*/
+
 
   // ─── 위험구역 설정 후 안내 메시지 자동 숨김 (3초 후) ─────────────────────
   useEffect(() => {
@@ -92,80 +117,26 @@ export default function Dashboard() {
   // 1) 현재 시간 표시
   useEffect(() => {
     const timer = setInterval(() => {
-      const now      = new Date();
-      const year     = now.getFullYear();
-      const month    = String(now.getMonth()+1).padStart(2,'0');
-      const date     = String(now.getDate()).padStart(2,'0');
-      const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-      const day      = dayNames[now.getDay()];
-      let   h        = now.getHours();
-      const m        = String(now.getMinutes()).padStart(2,'0');
-      const ampm     = h>=12?'PM':'AM';
-      if (h>12) h -= 12;
-      if (h===0) h = 12;
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const date = String(now.getDate()).padStart(2, '0');
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const day = dayNames[now.getDay()];
+      let h = now.getHours();
+      const m = String(now.getMinutes()).padStart(2, '0');
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      if (h > 12) h -= 12;
+      if (h === 0) h = 12;
       setCurrentTime(`${year}-${month}-${date} (${day}) / ${ampm}-${h}:${m}`);
-    },1000);
+    }, 1000);
     return () => clearInterval(timer);
-  },[]);
-
-  // 2) Firestore 이벤트 로그 가져오기 (showLoading 플래그)
-  const fetchLogs = useCallback(async (showLoading=false) => {
-    if (showLoading) setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch('http://localhost:8000/api/logs?limit=50');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      console.log('API logs:', data); //디테일 내용
-      setLogs(data);
-      if (data.length) setActiveId(data[0].id);
-    } catch(e) {
-      console.error(e);
-      setError('로그를 불러오는 중 오류가 발생했습니다.');
-    } finally {
-      if (showLoading) setLoading(false);
-    }
-  },[]);
-// 3) 최초 마운트 시에만 로딩 표시
-  useEffect(() => { fetchLogs(true); }, [fetchLogs]);// 최초 로드 때만 showLoading=true
-
-  const handleControl = async (url, options = {}) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(url, { method: 'POST', ...options });
-
-      // 202 Accepted: 2차 확인이 필요한 경우
-      if (res.status === 202) {
-        const data = await res.json();
-        if (data.confirmation_required && window.confirm(data.message)) {
-          // 사용자가 확인하면, confirmed=true 파라미터와 함께 다시 요청
-          const confirmedUrl = new URL(url);
-          confirmedUrl.searchParams.append('confirmed', 'true');
-          await handleControl(confirmedUrl.toString(), options);
-        }
-        return; // 2차 확인 흐름이 끝나면 여기서 함수 종료
-      }
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || `HTTP ${res.status}`);
-      }
+  }, [initialize]);
 
       const data = await res.json();
       setOperationMode(data.operation_mode);
 
-    } catch (e) {
-      console.error(e);
-      // 기존 setError 대신 새로운 popupError 상태를 사용합니다.
-      const errorMessage = e.message || '명령을 실행하는 중 오류가 발생했습니다.';
-      setPopupError(errorMessage);
-      // 5초 후에 자동으로 팝업을 닫습니다.
-      setTimeout(() => setPopupError(null), 5000);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // --- 위험 구역 관련 핸들러 함수들 (추후 별도 훅으로 분리 가능) ---
 
 
   const handleStartAutomatic = async () => {
@@ -275,32 +246,16 @@ export default function Dashboard() {
   // 6-4) 위험 구역 삭제 (확인 다이얼로그에 zone 이름 표시)
   const handleDeleteZone = async () => {
     if (!selectedZoneId) return;
-    let targetName = '';
+    const targetName = zones.find(z => z.id === selectedZoneId)?.name || '선택된 구역';
+    if (!window.confirm(`${targetName}을 삭제하시겠습니까?`)) return;
     try {
-      const resList = await fetch('http://localhost:8000/api/zones/');
-      if (!resList.ok) throw new Error(resList.status);
-      const list = await resList.json();
-      targetName = list.find(z => z.id === selectedZoneId)?.name || '';
-    } catch {
-      console.warn('삭제 전 서버 재조회 실패');
+      await zoneAPI.deleteZone(selectedZoneId); // zoneAPI 사용 (deleteZone은 아직 미구현)
+      setSelectedZoneId(null);
+      await fetchZones();
+      setShowComplete(true);
+    } catch (err) {
+      setPopupError('위험 구역 삭제 실패: ' + (err.response?.data?.detail || err.message));
     }
-    const displayName = targetName || '선택된 구역';
-    if (!window.confirm(`${displayName}을 삭제하시겠습니까?`)) return;
-    const res = await fetch(`http://localhost:8000/api/zones/${selectedZoneId}`, { method: 'DELETE' });
-    if (!res.ok) {
-      alert('위험 구역 삭제 실패');
-      return;
-    }
-    setSelectedZoneId(null);
-    await fetchZones();
-    setShowComplete(true);
-  };
-
-  // 7) 위험 구역 설정 모드 진입
-  const startDangerMode = () => {
-    setIsDangerMode(true);
-    setConfigAction(null);
-    setShowInstruction(false);
   };
 
   // 8) DangerZoneSelector에서 비율 좌표를 받아서 저장
@@ -366,24 +321,27 @@ export default function Dashboard() {
       <div className="main-layout">
         {/* 왼쪽: 비디오 스트림 + 선택도구 + 오버레이 */}
         <div className="left-panel">
-          <div className="live-stream-wrapper">
-            {isDangerMode ? (
-              <DangerZoneSelector onComplete={handleDangerComplete}/>
           <div
-            className="live-stream-wrapper"
-            ref={liveStreamRef}
+            className="live-stream-wrapper dz-wrapper"
             style={{ position: 'relative' }}
           >
-            {isDangerMode && (configAction === 'create' || configAction === 'update') ? (
-              <DangerZoneSelector onComplete={handleDangerComplete} />
-            ) : (
-              <>
-                <LiveStreamContent/>
-                {selectedZone.length > 0 && (
-                  <ZoneOverlay coords={selectedZone}/>
-                )}
-              </>
-              <LiveStreamContent eventId={activeId} />
+            {isDangerMode && (configAction==='create'||configAction==='update')
+              ? (
+                <DangerZoneSelector
+                  eventId={activeId}
+                  onComplete={handleDangerComplete}
+                  onImageLoad={handleImageLoad}
+                />
+              ) : (
+                <LiveStreamContent eventId={activeId} onImageLoad={handleImageLoad} />
+              )
+            }
+
+            {/* 안내 메시지 */}
+            {isDangerMode && configAction==='create' && showInstruction && (
+              <div className="center-message">
+                ⚠️ 클릭하여 점을 찍어 위험 구역을 생성하세요!
+              </div>
             )}
 
             {/* 완료 메시지 */}
@@ -392,18 +350,7 @@ export default function Dashboard() {
                 ✅ 작업이 완료되었습니다!
               </div>
             )}
-
-            {/* 저장된 zones 오버레이 */}
-            {!isDangerMode && zones.map(z => (
-              <ZoneOverlay
-                key={z.id} ratios={z.points.map(p => ({ xRatio:p.x, yRatio:p.y }))}
-              />
-            ))}
-
-            {/* 미리보기 오버레이 */}
-            {!isDangerMode && selectedZone.length>0 && (
-              <ZoneOverlay key="preview" ratios={selectedZone} />
-            )}
+            {showComplete && <div className="center-message">✅ 작업이 완료되었습니다!</div>}
           </div>
         </div>
 
@@ -418,14 +365,14 @@ export default function Dashboard() {
               ) : (
                 <VideoLogTable logs={logs} activeId={activeId} onSelect={setActiveId} />
               )}
-          <ConveyorMode
-            operationMode={operationMode}
-            loading={loading}
-            onStartAutomatic={handleStartAutomatic}
-            onStartMaintenance={handleStartMaintenance}
-            onStop={handleStop}
-            onDangerMode={startDangerMode}
-          />
+              <ConveyorMode
+                operationMode={operationMode}
+                loading={loading}
+                onStartAutomatic={() => handleControl('start_automatic')}
+                onStartMaintenance={() => handleControl('start_maintenance')}
+                onStop={() => handleControl('stop')}
+                onDangerMode={() => setIsDangerMode(true)}
+              />
             </>
           ) : (
             <>
@@ -434,7 +381,7 @@ export default function Dashboard() {
                 selected={selectedZoneId}
                 onSelect={setSelectedZoneId}
                 currentAction={configAction}
-                onActionSelect={handleActionSelect}
+                onActionSelect={setConfigAction}
                 onDelete={handleDeleteZone}
                 onCancel={() => setIsDangerMode(false)}
               />
@@ -473,6 +420,7 @@ export default function Dashboard() {
             <div className="error-popup-content">
               {popupError}
             </div>
+            <div className="error-popup-content">{popupError}</div>
           </div>
         </div>
       )}
@@ -484,7 +432,7 @@ export default function Dashboard() {
             <div className="logout-title">로그아웃 하시겠습니까?</div>
             <div className="logout-buttons">
               <button className="logout-yes" onClick={() => navigate('/login')}>네</button>
-              <button className="logout-no"  onClick={() => setShowLogoutModal(false)}>아니요</button>
+              <button className="logout-no" onClick={() => setShowLogoutModal(false)}>아니요</button>
             </div>
           </div>
         </div>

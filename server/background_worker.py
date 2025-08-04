@@ -48,7 +48,7 @@ async def run_safety_system(app: FastAPI):
         return
 
     try:
-        input_adapter = InputAdapter(camera_index=0, mock_mode=False)
+        input_adapter = InputAdapter(camera_index=3, mock_mode=False)
         logger.success("InputAdapter 초기화 완료.")
     except Exception as e:
         logger.error(f"InputAdapter 초기화 중 심각한 오류 발생: {e}")

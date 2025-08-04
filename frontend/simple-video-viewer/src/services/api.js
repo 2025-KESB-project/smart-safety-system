@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const apiClient = axios.create({
-  baseURL: '/api', // package.json의 "proxy" 설정과 연동
+  baseURL: '', // baseURL을 비워 둡니다.
   headers: {
     'Content-Type': 'application/json',
   },
@@ -17,7 +17,7 @@ export const logAPI = {
    */
   getLogs: async () => {
     try {
-      const response = await apiClient.get('/logs');
+      const response = await apiClient.get('/api/logs'); // 전체 경로 사용
       return response.data;
     } catch (error) {
       console.error('Error fetching logs:', error);
@@ -36,7 +36,7 @@ export const zoneAPI = {
    */
   getZones: async () => {
     try {
-      const response = await apiClient.get('/zones');
+      const response = await apiClient.get('/api/zones'); // 전체 경로 사용
       return response.data;
     } catch (error) {
       console.error('Error fetching zones:', error);
@@ -50,7 +50,7 @@ export const zoneAPI = {
    */
   saveZones: async (zones) => {
     try {
-      const response = await apiClient.post('/zones', zones);
+      const response = await apiClient.post('/api/zones', zones); // 전체 경로 사용
       return response.data;
     } catch (error) {
       console.error('Error saving zones:', error);
@@ -65,7 +65,7 @@ export const zoneAPI = {
    */
   updateZone: async (zoneId, zoneData) => {
     try {
-      const response = await apiClient.put(`/zones/${zoneId}`, zoneData);
+      const response = await apiClient.put(`/api/zones/${zoneId}`, zoneData); // 전체 경로 사용
       return response.data;
     } catch (error) {
       console.error(`Error updating zone ${zoneId}:`, error);
@@ -79,7 +79,7 @@ export const zoneAPI = {
    */
   deleteZone: async (zoneId) => {
     try {
-      const response = await apiClient.delete(`/zones/${zoneId}`);
+      const response = await apiClient.delete(`/api/zones/${zoneId}`); // 전체 경로 사용
       return response.data;
     } catch (error) {
       console.error(`Error deleting zone ${zoneId}:`, error);
@@ -93,42 +93,35 @@ export const zoneAPI = {
  */
 export const controlAPI = {
   /**
-   * 시스템을 시작합니다.
-   * @returns {Promise<Object>} 성공 메시지
+   * 자동 운전 모드를 시작합니다.
+   * @returns {Promise<Object>} 시스템 상태
    */
-  startSystem: async () => {
-    try {
-      const response = await apiClient.post('/control/start');
-      return response.data;
-    } catch (error) {
-      console.error('Error starting system:', error);
-      throw error;
-    }
+  startAutomatic: async () => {
+    const response = await apiClient.post('/api/control/start_automatic'); // 전체 경로 사용
+    return response.data;
+  },
+  /**
+   * 정비 모드를 시작합니다.
+   * @returns {Promise<Object>} 시스템 상태
+   */
+  startMaintenance: async () => {
+    const response = await apiClient.post('/api/control/start_maintenance'); // 전체 경로 사용
+    return response.data;
   },
   /**
    * 시스템을 중지합니다.
-   * @returns {Promise<Object>} 성공 메시지
+   * @returns {Promise<Object>} 시스템 상태
    */
-  stopSystem: async () => {
-    try {
-      const response = await apiClient.post('/control/stop');
-      return response.data;
-    } catch (error) {
-      console.error('Error stopping system:', error);
-      throw error;
-    }
+  stop: async () => {
+    const response = await apiClient.post('/api/control/stop'); // 전체 경로 사용
+    return response.data;
   },
    /**
    * 현재 시스템 상태를 조회합니다.
    * @returns {Promise<Object>} 시스템 상태
    */
   getStatus: async () => {
-    try {
-      const response = await apiClient.get('/control/status');
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching status:', error);
-      throw error;
-    }
+    const response = await apiClient.get('/api/control/status'); // 전체 경로 사용
+    return response.data;
   },
 };
