@@ -291,7 +291,7 @@ html, body {
 .log-board {
   display: flex;
   flex-direction: column;
-
+}
 /* 위험 구역 이름 입력 */
 .zone-name-input {
   width: 100%;
