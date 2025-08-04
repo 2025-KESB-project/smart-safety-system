@@ -2,7 +2,7 @@ import React from 'react';
 import './ZoneConfigPanel.css';
 
 export default function ZoneConfigPanel({
-  zones = [],
+  zones = [],            // 기본 빈 배열
   selected,
   onSelect,
   currentAction,
@@ -36,6 +36,21 @@ export default function ZoneConfigPanel({
           onClick={() => onActionSelect('delete')}
         >삭제</button>
       </div>
+      <ul className="zone-list">
+        {zones.length === 0 ? (
+          <li className="empty">등록된 위험 구역이 없습니다.</li>
+        ) : (
+          zones.map(z => (
+            <li
+              key={z.id}
+              className={z.id === selected ? 'selected' : ''}
+              onClick={() => onSelect(z.id)}
+            >
+              {z.name || `Zone ${z.id}`}
+            </li>
+          ))
+        )}
+      </ul>
 
       {/* “조회” 모드일 때만 리스트 노출 */}
       {currentAction === 'view' && (
