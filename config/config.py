@@ -4,6 +4,9 @@
 MOCK_MODE_INPUT = False
 MOCK_MODE_CONTROL = False # 실제 하드웨어 제어를 위해 False로 설정
 
+# --- 카메라 설정 ---
+CAMERA_INDEX = 0 # 사용할 카메라의 인덱스 (0은 보통 내장 웹캠)
+
 # --- 하드웨어 설정 ---
 ARDUINO_PORT = "COM9"  # 아두이노가 연결된 시리얼 포트
 ARDUINO_BAUDRATE = 9600 # 아두이노와 통신할 보드레이트

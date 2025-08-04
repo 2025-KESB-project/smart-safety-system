@@ -28,7 +28,7 @@
 - 모듈: `detect/`
 
 ### 3. Logic Layer
-- `risk_evaluator`, `mode_manager`, `rule_engine`을 통해 시스템의 상태와 위험도를 판단하고, 최종 행동을 결정합니다.
+- `risk_evaluator`, `mode_manager`, `rule_engine`를 통해 시스템의 상태와 위험도를 판단하고, 최종 행동을 결정합니다.
 - 모듈: `logic/`
 
 ### 4. Control Layer
@@ -72,7 +72,7 @@
 
 ##  폴더 구조 (2025.07-28 기준)
 
-'''
+```
 .
 ├── ...
 ├── server/
@@ -95,7 +95,7 @@
 │       ├── db_service.py   # DB 로직 + 실시간 로그 방송 기능
 │       └── zone_service.py
 └── ...
-'''
+```
 
 ---
 
@@ -139,3 +139,16 @@
 - **`RuleEngine`의 반복적인 `POWER_ON`/`STOP_POWER` 명령 생성**: `LogicFacade`가 `RuleEngine`에 `current_conveyor_status`를 전달하고, `RuleEngine`은 컨베이어가 작동 중일 때만 `STOP_POWER` 명령을 생성하도록 로직을 수정하여 해결. (이전에는 `POWER_ON` 명령 반복 생성 문제도 동일한 방식으로 해결됨)
 - **`ControlFacade`의 `POWER_OFF` 액션 무시**: `background_worker`가 `POWER_OFF` 액션을 보냈을 때 `ControlFacade`가 이를 알 수 없는 액션으로 처리하던 문제. `ControlFacade`의 `execute_actions` 메소드 조건문에 `action_type == "POWER_OFF"`를 추가하여 해결.
 - **`stop_system` API 하드웨어 연동**: `control_api.py`의 `stop_system` 메소드가 `ControlFacade`를 통해 실제 하드웨어 전원을 차단하도록 수정.
+
+### 5. 주요 디버깅 및 해결 과정 (2025-08-04 업데이트)
+
+- **피에조 부저 경고 시스템 통합**:
+    - `control/alert_controller.py`를 수정하여 `AlertDevice`를 `PIEZO_BUZZER`로 단일화하고, 위험 수준(`MEDIUM`, `HIGH`, `CRITICAL`)에 따라 아두이노로 다른 명령어(`b_medium`, `b_high`, `b_critical`)를 전송하도록 구현.
+    - `arduino/safesystem-new/safesystem-new.ino`에 `BUZZER_PIN` 정의 및 `play_alert_sound` 함수를 추가하여, 수신된 명령어에 따라 다른 음계(낮은 솔, 높은 도, 높은 솔)로 3번 반복되는 경고음을 재생하도록 구현.
+- **`SerialCommunicator` 아키텍처 개선 및 계층 분리**:
+    - `control/serial_communicator.py` 파일을 프로젝트 최상위의 `core/` 디렉터리로 이동시켜, `SerialCommunicator`를 `control` 및 `input_adapter` 계층 모두가 공유하는 독립적인 공용 자원으로 승격. 이는 계층 간의 불필요한 의존성을 제거하고 재사용성을 높임.
+    - `control/control_facade.py`, `input_adapter/input_facade.py`, `input_adapter/sensor.py` 등 `SerialCommunicator`를 사용하던 모든 파일의 `import` 경로를 `core.serial_communicator`로 변경.
+    - `server/app.py`의 `lifespan` 함수에서 `SerialCommunicator`의 단일 인스턴스를 생성하고, 이를 `ControlFacade`와 `InputAdapter`에 주입(Dependency Injection)하도록 수정. 이로써 시리얼 포트의 단일 연결을 보장하고 리소스 충돌 문제를 해결.
+- **'빠른 실패(Fail-Fast)' 로직 도입**:
+    - `input_adapter/input_facade.py`와 `input_adapter/sensor.py`의 `__init__` 메소드에 `mock_mode=False`임에도 `communicator`가 주입되지 않을 경우 명시적인 `ValueError`를 발생시키도록 로직 추가. 이는 조용한 실패를 방지하고 개발자가 초기화 문제를 즉시 인지하도록 유도.
+    - 이로 인해 발생한 `InputAdapter` 초기화 오류를 `server/app.py`에서 `SerialCommunicator`를 올바르게 주입함으로써 해결.

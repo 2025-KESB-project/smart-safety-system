@@ -9,6 +9,7 @@ from logic.logic_facade import LogicFacade
 from server.services.db_service import DBService
 from server.services.websocket_service import WebSocketService
 from server.services.zone_service import ZoneService
+from input_adapter.input_facade import InputAdapter
 
 # --- 중앙 관리 객체 의존성 ---
 
@@ -77,3 +78,12 @@ def get_zone_service(request: Request) -> ZoneService:
     # ZoneService는 상태를 갖지 않으므로, 요청 시마다 생성해도 무방합니다.
     # 또는 app.state에 등록된 단일 인스턴스를 사용할 수도 있습니다.
     return ZoneService(db=request.app.state.db)
+
+def get_input_adapter(request: Request) -> InputAdapter:
+    """
+    app.state에 저장된 공유 InputAdapter 인스턴스를 가져옵니다.
+    """
+    if not hasattr(request.app.state, 'input_adapter'):
+        logger.critical("InputAdapter가 app.state에 초기화되지 않았습니다!")
+        raise RuntimeError("InputAdapter is not initialized.")
+    return request.app.state.input_adapter

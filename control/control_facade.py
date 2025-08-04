@@ -12,7 +12,7 @@ from server.services.db_service import DBService
 class ControlFacade:
     """
     물리적 장치 제어를 위한 통합 인터페이스(Facade).
-    각 컨트롤러의 인스턴스를 소유하고 관리합니다.
+    이제 SerialCommunicator의 생성과 생명주기를 책임집니다.
     """
     def __init__(self, mock_mode: bool = False, serial_port: str = None, baud_rate: int = 9600):
         # Determine serial port if not provided
@@ -43,6 +43,10 @@ class ControlFacade:
 
         logger.info("ControlFacade 초기화 완료.")
 
+    def get_communicator(self) -> SerialCommunicator:
+        """소유하고 있는 SerialCommunicator의 참조를 반환합니다."""
+        return self.communicator
+
     def execute_actions(self, actions: List[Dict[str, Any]]):
         """
         '두뇌(Logic Layer)'가 결정한 액션 목록을 받아 '근육'을 움직입니다.
@@ -57,6 +61,11 @@ class ControlFacade:
             action_type = action.get("type")
             details = action.get("details", {})
             reason = details.get('reason', '자동 시스템 로직에 의해')
+
+            # action_type이 문자열이 아닌 경우(None 등)를 건너뛰는 안전장치
+            if not isinstance(action_type, str):
+                logger.warning(f"잘못되었거나 누락된 액션 타입: {action}")
+                continue
 
             logger.debug(f"Executing action: {action_type} with reason: {reason}")
 
@@ -100,3 +109,9 @@ class ControlFacade:
             "is_alert_on": alert_status.get("is_alert_on"),
         }
         return statuses
+
+    def release(self):
+        """ControlFacade와 모든 하위 컨트롤러의 리소스를 해제합니다."""
+        logger.info("ControlFacade 리소스를 해제합니다...")
+        self.communicator.close() # SerialCommunicator의 연결을 닫습니다.
+        logger.info("ControlFacade 리소스 해제 완료.")

@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any, List
 from collections import deque
 from loguru import logger
 
-from control.serial_communicator import SerialCommunicator
+from core.serial_communicator import SerialCommunicator
 
 try:
     import serial
@@ -25,9 +25,12 @@ class SensorReader:
                  mock_mode: bool = True,
                  max_buffer_size: int = 100):
         
+        # Fail-Fast: 실제 모드(mock_mode=False)에서는 communicator가 필수입니다.
+        if not mock_mode and communicator is None:
+            raise ValueError("SensorReader는 실제 모드에서 SerialCommunicator 객체가 반드시 필요합니다.")
+
         self.communicator = communicator
-        # communicator가 없거나, communicator가 모의 모드이면 SensorReader도 모의 모드로 작동
-        self.mock_mode = mock_mode or (communicator is None) or communicator.mock_mode
+        self.mock_mode = mock_mode
         
         self.lock = threading.Lock()
         self.is_running = False

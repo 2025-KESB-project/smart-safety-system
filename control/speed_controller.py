@@ -3,7 +3,7 @@ import time
 from typing import Dict, Optional
 from enum import Enum
 
-from control.serial_communicator import SerialCommunicator
+from core.serial_communicator import SerialCommunicator
 
 class SpeedState(Enum):
     """속도 상태"""

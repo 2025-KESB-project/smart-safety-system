@@ -47,12 +47,8 @@ async def run_safety_system(app: FastAPI):
         logger.critical(f"app.state에서 객체를 가져오는 데 실패했습니다: {e}. Lifespan 초기화가 실패했을 수 있습니다.")
         return
 
-    try:
-        input_adapter = InputAdapter(camera_index=3, mock_mode=False)
-        logger.success("InputAdapter 초기화 완료.")
-    except Exception as e:
-        logger.error(f"InputAdapter 초기화 중 심각한 오류 발생: {e}")
-        return
+    # lifespan에서 생성된 InputAdapter 인스턴스를 사용합니다.
+    input_adapter = app.state.input_adapter
 
     # 최초 실행 시 컨베이어 전원을 끄고 시스템 상태를 기록합니다.
     logger.info("안전 초기화: 컨베이어 전원을 OFF 상태로 시작합니다.")

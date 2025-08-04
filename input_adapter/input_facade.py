@@ -4,7 +4,7 @@ from .sensor import SensorReader
 from typing import Optional
 from loguru import logger
 
-from control.serial_communicator import SerialCommunicator
+from core.serial_communicator import SerialCommunicator
 
 class InputAdapter:
     def __init__(self, 
@@ -16,9 +16,12 @@ class InputAdapter:
         InputAdapter는 카메라와 센서로부터 입력을 받아 전처리된 데이터를 반환합니다.
         이제 SerialCommunicator를 주입받아 SensorReader에게 전달합니다.
         """
+        # Fail-Fast: 실제 모드(mock_mode=False)에서는 communicator가 필수입니다.
+        if not mock_mode and communicator is None:
+            raise ValueError("InputAdapter는 실제 모드에서 SerialCommunicator 객체가 반드시 필요합니다.")
+
         self.use_camera = use_camera
-        # communicator가 없거나 mock_mode가 True이면 전체가 모의 모드로 작동
-        self.mock_mode = mock_mode or (communicator is None)
+        self.mock_mode = mock_mode
 
         if self.use_camera and not self.mock_mode:
             self.stream = VideoStream(source=camera_index)

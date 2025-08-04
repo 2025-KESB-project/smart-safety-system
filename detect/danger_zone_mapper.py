@@ -99,7 +99,7 @@ class DangerZoneMapper:
         try:
             zone_id = zone_data.get('id', 'N/A')
             zone_name = zone_data.get('name', 'Unknown Zone')
-            points_list = [[p['0'], p['1']] for p in zone_data['points']]
+            points_list = [[p['x'], p['y']] for p in zone_data['points']]
             points = np.array(points_list, dtype=np.int32)
             iou_threshold = zone_data.get('iou_threshold', 0.2)
 

@@ -2,7 +2,7 @@ from loguru import logger
 from typing import Optional
 
 # from control.speed_controller import SpeedController
-from control.serial_communicator import SerialCommunicator
+from core.serial_communicator import SerialCommunicator
 
 
 class PowerController:

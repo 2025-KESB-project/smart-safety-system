@@ -4,7 +4,7 @@ from typing import Dict, List, Tuple
 from enum import Enum
 import threading
 
-from control.serial_communicator import SerialCommunicator
+from core.serial_communicator import SerialCommunicator
 
 class AlertLevel(Enum):
     """경고 수준"""

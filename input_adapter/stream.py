@@ -25,10 +25,17 @@ class VideoStream:
     def _initialize_camera(self):
         """카메라를 초기화합니다."""
         try:
+            logger.info(f"cv2.VideoCapture({self.source})를 시도합니다...")
             self.cap = cv2.VideoCapture(self.source)
-            if not self.cap.isOpened():
+            
+            # --- 디버깅 로그 추가 ---
+            if self.cap.isOpened():
+                logger.success(f"카메라 {self.source}가 성공적으로 열렸습니다.")
+            else:
+                logger.error(f"카메라 {self.source}를 여는 데 실패했습니다. isOpened()가 False를 반환했습니다.")
+                # 실패 시 더 이상 진행하지 않고 즉시 예외 발생
                 raise RuntimeError(f"비디오 소스를 열 수 없습니다: {self.source}")
-                
+
             # 카메라 설정
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
@@ -38,7 +45,10 @@ class VideoStream:
             logger.info(f"카메라 초기화 완료: {self.source}, 해상도: {self.resolution}, FPS: {self.fps}")
                 
         except Exception as e:
-            logger.error(f"카메라 초기화 실패: {e}")
+            logger.error(f"카메라 초기화 중 예외 발생: {e}")
+            # self.cap이 None이거나 열리지 않았을 수 있으므로 release 호출 전 확인
+            if self.cap:
+                self.cap.release()
             raise
 
     def get_frame(self) -> Optional[np.ndarray]:
