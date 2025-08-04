@@ -21,7 +21,7 @@ class ControlFacade:
         # 2. 생성된 communicator를 각 하위 컨트롤러에 주입합니다.
         self.speed_controller = SpeedController(communicator=self.communicator, mock_mode=self.communicator.mock_mode)
         self.power_controller = PowerController(communicator=self.communicator, mock_mode=self.communicator.mock_mode)
-        self.alert_controller = AlertController(mock_mode=self.communicator.mock_mode)
+        self.alert_controller = AlertController(communicator=self.communicator, mock_mode=self.communicator.mock_mode)
 
         # 최종 하드웨어 연결 상태를 요약하여 로깅합니다.
         if not self.communicator.mock_mode:
