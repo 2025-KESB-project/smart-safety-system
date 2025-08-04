@@ -25,14 +25,14 @@ def get_latest_frame():
 # --------------------------------------------------------------------------
 # 핵심 안전 시스템 워커 함수
 # --------------------------------------------------------------------------
-def run_safety_system(app: FastAPI):
+async def run_safety_system(app: FastAPI):
     """
     실시간 영상 처리 및 안전 로직을 수행하는 메인 루프 (중앙 조정자).
-    FastAPI의 lifespan에서 별도 스레드로 실행됩니다.
+    FastAPI의 lifespan에서 비동기 태스크로 실행됩니다.
     `state_manager.is_active()` 상태에 따라 로직 수행 여부를 결정합니다.
     """
     global latest_frame
-    logger.info("백그라운드 안전 시스템 워커 스레드를 시작합니다...")
+    logger.info("비동기 안전 시스템 워커를 시작합니다...")
 
     # app.state에서 중앙 관리 객체들을 가져옵니다.
     try:
@@ -48,7 +48,7 @@ def run_safety_system(app: FastAPI):
         return
 
     try:
-        input_adapter = InputAdapter(camera_index=0, mock_mode=False)
+        input_adapter = InputAdapter(camera_index=3, mock_mode=False)
         logger.success("InputAdapter 초기화 완료.")
     except Exception as e:
         logger.error(f"InputAdapter 초기화 중 심각한 오류 발생: {e}")
@@ -57,7 +57,7 @@ def run_safety_system(app: FastAPI):
     # 최초 실행 시 컨베이어 전원을 끄고 시스템 상태를 기록합니다.
     logger.info("안전 초기화: 컨베이어 전원을 OFF 상태로 시작합니다.")
     control_facade.execute_actions([{"type": "POWER_OFF"}])
-    db_service.log_event({
+    await db_service.log_event({
         "event_type": "LOG_SYSTEM_INITIALIZED", 
         "details": {"message": "System worker started, conveyor forced OFF."}
     })
@@ -65,10 +65,12 @@ def run_safety_system(app: FastAPI):
     while True:
         try:
             # 1. 영상 프레임 및 센서 데이터 획득 (항상 실행)
+            # 참고: 이 부분은 동기적이므로, CPU 사용량이 매우 높을 경우
+            # asyncio.to_thread (Python 3.9+)를 사용하여 실행하는 것을 고려할 수 있습니다.
             input_data = input_adapter.get_input()
             if input_data is None or input_data.get('raw_frame') is None:
                 logger.warning("입력 스트림으로부터 프레임을 가져올 수 없습니다. 1초 후 재시도...")
-                time.sleep(1)
+                await asyncio.sleep(1)
                 continue
             
             raw_frame = input_data['raw_frame']
@@ -76,10 +78,10 @@ def run_safety_system(app: FastAPI):
 
             # 2. 시스템 활성화 상태일 때만 안전 로직 및 시각화 수행
             if state_manager.is_active():
-                # StateManager를 통해 논리적/물리적 상태를 한 번에 가져옵니다.
                 current_status = state_manager.get_status()
                 current_mode = current_status.get("operation_mode")
                 conveyor_is_on = current_status.get("conveyor_is_on", False)
+                conveyor_speed = current_status.get("conveyor_speed", 100)
                 sensor_data = input_data['sensor_data']
 
                 # 객체 탐지
@@ -92,7 +94,8 @@ def run_safety_system(app: FastAPI):
                     detection_result=detection_result,
                     sensor_data=sensor_data,
                     current_mode=current_mode,
-                    current_conveyor_status=conveyor_is_on
+                    current_conveyor_status=conveyor_is_on,
+                    current_conveyor_speed=conveyor_speed
                 )
 
                 # 액션 실행 (조정자가 실행 분배)
@@ -131,11 +134,10 @@ def run_safety_system(app: FastAPI):
                             "details": {"description": description},
                             "log_risk_level": log_risk_level
                         }
-                        db_service.log_event(event_data)
+                        await db_service.log_event(event_data)
                     
                     elif action_type == 'NOTIFY_UI':
-                        coro = websocket_service.broadcast_to_channel('alerts', action.get("details", {}))
-                        asyncio.run_coroutine_threadsafe(coro, loop)
+                        await websocket_service.broadcast_to_channel('alerts', action.get("details", {}))
 
                 if control_actions:
                     control_facade.execute_actions(control_actions)
@@ -169,14 +171,15 @@ def run_safety_system(app: FastAPI):
             else:
                 # 시스템이 비활성화 상태일 때 대기하며 화면에 상태 표시
                 cv2.putText(display_frame, "SYSTEM INACTIVE", (15, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-                time.sleep(0.5) # CPU 사용량 감소를 위한 대기
+                await asyncio.sleep(0.5)
 
             # 3. 최신 프레임을 전역 변수에 업데이트 (항상 실행)
             latest_frame = display_frame.copy()
+            await asyncio.sleep(0.01)
 
         except Exception as e:
             logger.error(f"백그라운드 워커 루프에서 예외 발생: {e}", exc_info=True)
-            time.sleep(5)
+            await asyncio.sleep(5)
 
     input_adapter.release()
-    logger.info("백그라운드 안전 시스템 워커가 종료되었습니다.")
+    logger.info("비동기 안전 시스템 워커가 종료되었습니다.")

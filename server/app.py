@@ -1,6 +1,5 @@
 import asyncio
 import sys
-import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 import os
@@ -38,9 +37,9 @@ from server.routes import log_api, streaming, alert_ws, zone_api, control_api, l
 # 중앙 설정 (CONFIG)
 # --------------------------------------------------------------------------
 CONFIG = {
-    'input': {'camera_index': 0, 'mock_mode': False},
+    'input': {'camera_index': 3, 'mock_mode': False},
     'detector': {'person_detector': {'model_path': 'yolov8n.pt'}, 'pose_detector': {'pose_model_path': 'yolov8n-pose.pt'}},
-    'control': {'mock_mode': True},
+    'control': {'mock_mode': False},
     'service': {'firebase_credential_path': str(Path(__file__).parent.parent / "config" / "firebase_credential.json")}
 }
 
@@ -103,15 +102,10 @@ async def lifespan(app: FastAPI):
         
         logger.success("모든 서비스 및 로직 모듈 초기화 완료.")
 
-        # 4. 백그라운드 워커 스레드 시작
-        worker_thread = threading.Thread(
-            target=run_safety_system,
-            args=(app,),
-            daemon=True
-        )
-        worker_thread.start()
-        app.state.worker_thread = worker_thread
-        logger.success("백그라운드 안전 시스템 워커 스레드를 시작했습니다.")
+        # 4. 백그라운드 워커를 비동기 태스크로 시작
+        worker_task = asyncio.create_task(run_safety_system(app))
+        app.state.worker_task = worker_task
+        logger.success("백그라운드 안전 시스템 워커를 비동기 태스크로 시작했습니다.")
     else:
         logger.critical("DB 연결 실패로 인해 핵심 모듈 및 워커를 시작하지 않습니다.")
 
@@ -119,6 +113,9 @@ async def lifespan(app: FastAPI):
     
     # --- 서버 종료 ---
     logger.info("FastAPI 서버가 종료됩니다...")
+    if 'worker_task' in app.state and not app.state.worker_task.done():
+        logger.info("백그라운드 워커 태스크를 취소합니다.")
+        app.state.worker_task.cancel()
 
 # --------------------------------------------------------------------------
 # FastAPI 앱 생성 및 설정
@@ -160,11 +157,11 @@ def get_overall_status(request: Request):
     """시스템의 논리적, 물리적, 서비스 상태를 종합하여 반환합니다."""
     state_manager = request.app.state.state_manager
     control_facade = request.app.state.control_facade
-    worker = request.app.state.worker_thread
+    worker = request.app.state.worker_task
 
     status = {
         "logical_status": state_manager.get_status(),
         "physical_status": control_facade.get_power_status(),
-        "background_worker_alive": worker.is_alive() if worker else False,
+        "background_worker_alive": not worker.done() if worker else False,
     }
     return status

@@ -1,4 +1,4 @@
-from fastapi import Request
+from fastapi import Request, WebSocket
 from loguru import logger
 
 # 아키텍처 변경으로 인한 임포트 경로 수정
@@ -57,14 +57,14 @@ def get_db_service(request: Request) -> DBService:
         raise RuntimeError("DBService is not initialized.")
     return request.app.state.db_service
 
-def get_websocket_service(request: Request) -> 'WebSocketService':
+def get_websocket_service(websocket: WebSocket) -> 'WebSocketService':
     """
     app.state에 저장된 공유 WebSocketService 인스턴스를 가져옵니다.
     """
-    if not hasattr(request.app.state, 'websocket_service'):
+    if not hasattr(websocket.app.state, 'websocket_service'):
         logger.critical("WebSocketService가 app.state에 초기화되지 않았습니다!")
         raise RuntimeError("WebSocketService is not initialized.")
-    return request.app.state.websocket_service
+    return websocket.app.state.websocket_service
 
 def get_zone_service(request: Request) -> ZoneService:
     """

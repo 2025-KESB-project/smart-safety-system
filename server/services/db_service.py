@@ -13,6 +13,7 @@ class DBService:
     """
     Firestore 데이터베이스 작업을 관리하고,
     새로운 로그 발생 시 Pydantic 모델로 검증 후 WebSocketService에 방송을 위임합니다.
+    (비동기 방식으로 리팩토링됨)
     """
 
     def __init__(self, db: Client, loop: asyncio.AbstractEventLoop, websocket_service: WebSocketService):
@@ -36,9 +37,9 @@ class DBService:
             "details": f"Connected to collection '{self.collection_name}'" if self.db else "Firestore client not provided.",
         }
 
-    def log_event(self, event_data: Dict[str, Any]):
+    async def log_event(self, event_data: Dict[str, Any]):
         """
-        Firestore에 이벤트를 기록하고, Pydantic 모델로 검증 후
+        Firestore에 이벤트를 비동기적으로 기록하고, Pydantic 모델로 검증 후
         WebSocketService에 방송을 요청합니다.
         """
         try:
@@ -54,16 +55,18 @@ class DBService:
                 logger.error(f"웹소켓 로그 데이터 검증 실패: {e}")
                 return
 
-            # 2. DB에 데이터 저장
-            event_data_for_db = event_data.copy()
-            event_data_for_db['timestamp'] = firestore.SERVER_TIMESTAMP
-            collection_ref = self.db.collection(self.collection_name)
-            collection_ref.add(event_data_for_db)
-            logger.info(f"이벤트 로그 DB 저장 성공: {event_data.get('event_type')}")
+            # 2. DB에 데이터 저장 (동기 I/O 작업을 이벤트 루프를 막지 않도록 처리)
+            def db_write():
+                event_data_for_db = event_data.copy()
+                event_data_for_db['timestamp'] = firestore.SERVER_TIMESTAMP
+                collection_ref = self.db.collection(self.collection_name)
+                collection_ref.add(event_data_for_db)
+                logger.info(f"이벤트 로그 DB 저장 성공: {event_data.get('event_type')}")
 
-            # 3. WebSocketService에 'logs' 채널로 방송 위임
-            coro = self.websocket_service.broadcast_to_channel('logs', validated_data)
-            asyncio.run_coroutine_threadsafe(coro, self.loop)
+            await self.loop.run_in_executor(None, db_write)
+
+            # 3. WebSocketService에 'logs' 채널로 방송 위임 (간단한 await 호출로 변경)
+            await self.websocket_service.broadcast_to_channel('logs', validated_data)
             
         except Exception as e:
             logger.error(f"이벤트 로그 저장 또는 방송 중 오류 발생: {e}")

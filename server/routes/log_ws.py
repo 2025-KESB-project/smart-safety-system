@@ -6,7 +6,7 @@ from server.dependencies import get_websocket_service
 
 router = APIRouter()
 
-@router.websocket("/ws/logs")
+@router.websocket("/logs")
 async def websocket_log_endpoint(websocket: WebSocket, websocket_service: WebSocketService = Depends(get_websocket_service)):
     """
     실시간 이벤트 로그 스트리밍을 위한 WebSocket 엔드포인트입니다.

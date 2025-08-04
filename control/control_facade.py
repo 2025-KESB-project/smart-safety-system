@@ -14,7 +14,20 @@ class ControlFacade:
     물리적 장치 제어를 위한 통합 인터페이스(Facade).
     각 컨트롤러의 인스턴스를 소유하고 관리합니다.
     """
-    def __init__(self, mock_mode: bool = True, serial_port: str = 'COM9', baud_rate: int = 9600):
+    def __init__(self, mock_mode: bool = False, serial_port: str = None, baud_rate: int = 9600):
+        # Determine serial port if not provided
+        if serial_port is None:
+            serial_port = os.environ.get("SERIAL_PORT")
+            if not serial_port:
+                system = platform.system()
+                if system == "Darwin":  # macOS
+                    serial_port = "/dev/cu.usbserial-A5069RR4"
+                elif system == "Linux":
+                    serial_port = "/dev/ttyUSB0"
+                elif system == "Windows":
+                    serial_port = "COM1"
+                else:
+                    raise RuntimeError("Unsupported platform and no serial port specified.")
         # 1. 시리얼 통신을 전담할 단일 인스턴스를 생성합니다.
         self.communicator = SerialCommunicator(port=serial_port, baud_rate=baud_rate, mock_mode=mock_mode)
         # 2. 생성된 communicator를 각 컨트롤러에 주입합니다.

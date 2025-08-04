@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from fastapi.responses import JSONResponse
 from loguru import logger
 
-
 from server.dependencies import get_state_manager, get_db_service, get_logic_facade
 from server.state_manager import SystemStateManager
 from server.models.status import SystemStatusResponse, ConfirmationResponse
@@ -15,8 +14,8 @@ def get_complete_status(request: Request, state_manager: SystemStateManager, db_
     """모든 서비스의 상태를 종합하여 완전한 상태 딕셔너리를 반환합니다."""
     status = state_manager.get_status()
     status['database_service'] = db_service.get_status()
-    worker_task = request.app.state.worker_thread
-    status['background_worker_alive'] = worker_task.is_alive() if worker_task else False
+    worker_task = request.app.state.worker_task
+    status['background_worker_alive'] = not worker_task.done() if worker_task else False
     return status
 
 @router.post(
