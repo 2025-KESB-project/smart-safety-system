@@ -27,7 +27,7 @@ class AlertController:
         """
         self.mock_mode = mock_mode
         self.communicator = communicator
-        # 이제 장치는 부저 하나뿐입니다.
+
         self.device_status: Dict[str, str] = {AlertDevice.PIEZO_BUZZER.value: "idle"}
         self.is_alerting: Dict[AlertLevel, bool] = {level: False for level in AlertLevel} # 경고 상태 플래그
         self._lock = threading.Lock()

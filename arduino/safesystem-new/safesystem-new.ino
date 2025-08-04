@@ -16,10 +16,6 @@ const int PIR_PIN = 2;
 int pir_state = LOW;
 int last_pir_state = LOW;
 
-// 타이머 변수 (주기적인 데이터 전송용)
-unsigned long last_send_time = 0;
-const long send_interval = 1000; // 1초마다 데이터 전송
-
 void setup() {
   // 시리얼 통신 시작 (Python과 통신용)
   Serial.begin(9600);
@@ -40,7 +36,7 @@ void setup() {
   // PIR 센서 핀 초기화
   pinMode(PIR_PIN, INPUT);
 
-  Serial.println("Arduino is ready. Relay, Motor, and Buzzer control enabled.");
+  Serial.println("Arduino is ready. control enabled.");
 }
 
 // --- 메인 루프 ---
@@ -68,7 +64,10 @@ void handle_serial_commands() {
       int state = cmd.substring(1).toInt();
       if (state == 1) {
         digitalWrite(RELAY_PIN, HIGH); // 릴레이 ON
-        Serial.println("Command: p1 -> Power ON (Relay HIGH)");
+        digitalWrite(MOTOR_IN1, LOW);
+        digitalWrite(MOTOR_IN2, LOW);
+        analogWrite(MOTOR_ENA, 0); // 혹시 몰라서 모터도 OFF
+        Serial.println("Command: p1 -> Power ON (Relay HIGH) & Motor Stopped");
       } else {
         digitalWrite(RELAY_PIN, LOW);  // 릴레이 OFF
         Serial.println("Command: p0 -> Power OFF (Relay LOW)");
@@ -112,7 +111,7 @@ void handle_serial_commands() {
  * @param note_frequency 재생할 음의 주파수 (Hz)
  */
 void play_alert_sound(int note_frequency) {
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 9; i++) {
     tone(BUZZER_PIN, note_frequency, 150); // 150ms 동안 소리 재생
     delay(200); // 200ms 쉼
   }

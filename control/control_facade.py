@@ -31,9 +31,9 @@ class ControlFacade:
         # 1. 시리얼 통신을 전담할 단일 인스턴스를 생성합니다.
         self.communicator = SerialCommunicator(port=serial_port, baud_rate=baud_rate, mock_mode=mock_mode)
         # 2. 생성된 communicator를 각 컨트롤러에 주입합니다.
-        self.speed_controller = SpeedController(communicator=self.communicator, mock_mode=mock_mode)
-        self.power_controller = PowerController(communicator=self.communicator, mock_mode=mock_mode)
-        self.alert_controller = AlertController(mock_mode=mock_mode)
+        self.speed_controller = SpeedController(communicator=self.communicator, mock_mode=self.communicator.mock_mode)
+        self.power_controller = PowerController(communicator=self.communicator, mock_mode=self.communicator.mock_mode)
+        self.alert_controller = AlertController(communicator=self.communicator, mock_mode=self.communicator.mock_mode)
 
         # 최종 하드웨어 연결 상태를 요약하여 로깅합니다.
         if not self.communicator.mock_mode:
