@@ -44,16 +44,18 @@ export const zoneAPI = {
     }
   },
   /**
-   * 새로운 위험 구역을 저장합니다.
-   * @param {Array<Object>} zones - 저장할 위험 구역 데이터
+   * 새로운 위험 구역을 생성합니다.
+   * @param {Object} zoneData - 생성할 위험 구역 데이터 ({ id, name, points })
    * @returns {Promise<Object>} 성공 메시지
    */
-  saveZones: async (zones) => {
+  createZone: async (zoneData) => {
     try {
-      const response = await apiClient.post('/api/zones', zones); // 전체 경로 사용
+      // 백엔드의 create_zone 함수는 요청 본문에서 id와 zone_data를 모두 요구합니다.
+      // FastAPI의 Body(alias="id") 기능 덕분에, 프론트에서는 id를 포함한 단일 객체로 보낼 수 있습니다.
+      const response = await apiClient.post('/api/zones', zoneData);
       return response.data;
     } catch (error) {
-      console.error('Error saving zones:', error);
+      console.error('Error creating zone:', error);
       throw error;
     }
   },

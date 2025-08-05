@@ -1,24 +1,23 @@
 // src/pages/Dashboard/Dashboard.jsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-
 import { useNavigate } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 
 // --- 컴포넌트 임포트 ---
-import LiveStreamContent from './LiveStreamContent';
-import VideoLogTable from './VideoLogTable';
-import DangerZoneSelector from './DangerZoneSelector';
-import ConveyorMode from './ConveyorMode';
-import ZoneConfigPanel from './ZoneConfigPanel';
+import LiveStreamContent from '../../components/dashboard/LiveStreamContent';
+import VideoLogTable from '../../components/dashboard/VideoLogTable';
+import DangerZoneSelector from '../../components/dashboard/DangerZoneSelector';
+import ConveyorMode from '../../components/dashboard/ConveyorMode';
+import ZoneConfigPanel from '../../components/dashboard/ZoneConfigPanel';
+import ZoneOverlay from '../../components/dashboard/ZoneOverlay';
 
 // --- 훅 및 스토어 임포트 ---
-import { useWebSocket } from '../../hooks/useWebSocket';
+// import { useWebSocket } from '../../hooks/useWebSocket'; // 더 이상 사용하지 않음
 import useDashboardStore from '../../store/useDashboardStore';
-import { zoneAPI } from '../../services/api'; // zoneAPI 임포트
 
 import './Dashboard.css';
-import './DangerZoneSelector.css';
-// ⚙️ WebSocket 서버 URL 정의
+
+// WebSocket 서버 URL 정의
 const WS_URL = 'ws://localhost:8000/ws/logs';
 
 // --- 재사용 가능한 모달 컴포넌트들 ---
@@ -51,71 +50,27 @@ const LogoutModal = ({ onConfirm, onCancel }) => (
 
 // --- 메인 대시보드 컴포넌트 ---
 export default function Dashboard() {
-  // 1. Zustand 스토어에서 상태와 액션을 가져옵니다.
+  // 1. 스토어에서 모든 상태와 액션을 가져옵니다.
   const {
-    logs, zones, operationMode, loading, error, popupError,
-    activeId, isDangerMode, configAction, newZoneName, selectedZoneId, // selectedZoneId 추가
-    initialize, addLog, setActiveId, handleControl,
+    logs, zones, operationMode, loading, error, popupError, globalAlert, // globalAlert 추가
+    activeId, isDangerMode, configAction, newZoneName, selectedZoneId,
+    initialize, addLog, setActiveId, handleControl, 
     enterDangerMode, exitDangerMode, setConfigAction, setSelectedZoneId,
     setNewZoneName, setImageSize, handleCreateZone, handleUpdateZone, handleDeleteZone,
     setPopupError
   } = useDashboardStore();
 
-  // 2. Dashboard 컴포넌트 자체에서 관리해야 하는 UI 상태들
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
-  const [activeId, setActiveId] = useState(null);
-
-  // --- 위험 구역 설정 관련 상태 ---
-  const [isDangerMode, setIsDangerMode] = useState(false);
-  const [configAction, setConfigAction] = useState(null);
-  const [selectedZoneId, setSelectedZoneId] = useState(null);
-  const [selectedZone, setSelectedZone] = useState([]);
-  const [newZoneName, setNewZoneName] = useState('');
-  const [showInstruction, setShowInstruction] = useState(false);
-  const [showComplete, setShowComplete] = useState(false);
-  const [imageSize, setImageSize] = useState(null);
-
   const navigate = useNavigate();
 
-  // 전체 zones 리스트, 편집/삭제 대상 ID, 그리고 미리보기 좌표(ratio)
-  const [zones,           setZones]           = useState([]);
-  const [selectedZoneId,  setSelectedZoneId]  = useState(null);
-  const [selectedZone,    setSelectedZone]    = useState([]);
-  const [newZoneName,     setNewZoneName]     = useState('');  // 사용자 입력 구역 이름 상태
-  const [imageSize,       setImageSize]       = useState(null);  // 이미지 크기 정보
+  // --- WebSocket 상태 직접 관리 ---
+  const ws = useRef(null);
+  const [wsStatus, setWsStatus] = useState('connecting');
 
-  // 비디오 스트림 크기 참조 (영역 좌표 계산에 사용)
-  const liveStreamRef = useRef(null);
-
-
-
-      // ─── WebSocket 메시지 처리 콜백 ─────────────────────
-  const handleWsMessage = useCallback((msg) => {
-    if (msg && msg.id) {
-      setLogs(prev => [...prev, msg]);
-    }
-  }, []);
-
-  // ─── WebSocket 구독 및 상태 관리 ─────────────────────
-  const { status: wsStatus, error: wsError } = useWebSocket(
-    WS_URL,
-    handleWsMessage,
-    null,
-    5000,
-    3
-  );
-
-
-  // ─── 위험구역 설정 후 안내 메시지 자동 숨김 (3초 후) ─────────────────────
+  // 2. 초기 데이터 로딩 및 시간 표시
   useEffect(() => {
-    if (!showInstruction) return;
-    const t = setTimeout(() => setShowInstruction(false), 3000);
-    return () => clearTimeout(t);
-  }, [showInstruction]);
-
-  // 1) 현재 시간 표시
-  useEffect(() => {
+    initialize();
     const timer = setInterval(() => {
       const now = new Date();
       const year = now.getFullYear();
@@ -133,168 +88,56 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, [initialize]);
 
-      const data = await res.json();
-      setOperationMode(data.operation_mode);
-
-  // --- 위험 구역 관련 핸들러 함수들 (추후 별도 훅으로 분리 가능) ---
-
-
-  const handleStartAutomatic = async () => {
-    // 위험 이벤트(구역 침입 or 낙상) 확인
-    if (logs.some(l => l.event_type === 'zone_intrusion' || l.event_type === 'fall')) {
-      setPopupError(
-        '⚠️ 위험 구역에 인원 감지 또는 낙상이 감지되어\n운전 모드로 전환할 수 없습니다.'
-      );
-      setTimeout(() => setPopupError(null), 3000);
-      return;
-    }
-    await fetchLogs(false);
-    await handleControl('http://localhost:8000/api/control/start_automatic');
-  };
-
-  const handleStartMaintenance = async () => {
-    await handleControl('http://localhost:8000/api/control/start_maintenance');
-  };
-  const handleStop = async () => {
-    await handleControl('http://localhost:8000/api/control/stop');
-  };
-
-  // 6-1) 위험 구역 목록 조회
-  const fetchZones = useCallback(async () => {
-    try {
-      const res  = await fetch('http://localhost:8000/api/zones/');
-      if (!res.ok) throw new Error(res.status);
-      const data = await res.json();
-      setZones(data);
-    } catch (e) {
-      console.error('구역 조회 실패', e);
-    }
-  }, []);
+  // 3. WebSocket 연결 로직 (React StrictMode 호환)
   useEffect(() => {
-    if (!isDangerMode) fetchZones();
-  }, [isDangerMode, fetchZones]);
+    console.log("WebSocket 연결 시도...");
+    setWsStatus('connecting');
+    const socket = new WebSocket(WS_URL);
 
-  // 6-2) 위험 구역 생성 (사용자 입력 이름 우선 반영)
-  const handleCreateZone = async () => {
-    const id = `zone_${Date.now()}`;
-    let autoName;
-    try {
-      const resCount = await fetch('http://localhost:8000/api/zones/');
-      if (!resCount.ok) throw new Error(resCount.status);
-      const existing = await resCount.json();
-      autoName = `Zone ${existing.length + 1}`;
-    } catch {
-      autoName = `Zone ${zones.length + 1}`;
-    }
-    const name = newZoneName.trim() || autoName;  // 사용자 입력값 우선 사용
+    socket.onopen = () => {
+      console.log("✅ WebSocket 연결 성공!");
+      setWsStatus('open');
+    };
 
-    // selectedZone은 비율 좌표이므로 실제 이미지 좌표로 변환
-    const pts = selectedZone.map(r => ({
-      x: Math.round(r.xRatio * (imageSize?.naturalWidth || 800)),
-      y: Math.round(r.yRatio * (imageSize?.naturalHeight || 600)),
-    }));
+    socket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message && message.event_type) {
+          addLog(message);
+        }
+      } catch (e) {
+        console.error("WebSocket 메시지 처리 오류:", e);
+      }
+    };
 
-    const payload = { id, zone_data: { name, points: pts } };
-    const res = await fetch('http://localhost:8000/api/zones/', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      alert('위험 구역 생성 실패');
-      return;
-    }
-    alert('✅ 새로운 위험 구역이 생성되었습니다!');
-    await fetchZones();
-    setShowComplete(true);
-    setNewZoneName('');  // 입력창 초기화
-  };
+    socket.onerror = (error) => {
+      console.error("❌ WebSocket 오류 발생:", error);
+      setWsStatus('error');
+    };
 
-  // 6-3) 위험 구역 수정 (기존 이름 재조회 후 PUT)
-  const handleUpdateZone = async () => {
-    if (!selectedZoneId) return;
-    let existingName = '';
-    try {
-      const resList = await fetch('http://localhost:8000/api/zones/');
-      if (!resList.ok) throw new Error(resList.status);
-      const list = await resList.json();
-      existingName = list.find(z => z.id === selectedZoneId)?.name || '';
-    } catch {
-      existingName = zones.find(z => z.id === selectedZoneId)?.name || '';
-    }
+    socket.onclose = () => {
+      console.log("⛔️ WebSocket 연결 닫힘");
+      setWsStatus('closed');
+    };
 
-    // selectedZone은 비율 좌표이므로 실제 이미지 좌표로 변환
-    const pts = selectedZone.map(r => ({
-      x: Math.round(r.xRatio * (imageSize?.naturalWidth || 800)),
-      y: Math.round(r.yRatio * (imageSize?.naturalHeight || 600)),
-    }));
+    ws.current = socket;
 
-    const payload = { name: existingName, points: pts };
-    const res = await fetch(`http://localhost:8000/api/zones/${selectedZoneId}`, {
-      method:  'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      alert('위험 구역 업데이트 실패');
-      return;
-    }
-    await fetchZones();
-    setShowComplete(true);
-  };
-
-  // 6-4) 위험 구역 삭제 (확인 다이얼로그에 zone 이름 표시)
-  const handleDeleteZone = async () => {
-    if (!selectedZoneId) return;
-    const targetName = zones.find(z => z.id === selectedZoneId)?.name || '선택된 구역';
-    if (!window.confirm(`${targetName}을 삭제하시겠습니까?`)) return;
-    try {
-      await zoneAPI.deleteZone(selectedZoneId); // zoneAPI 사용 (deleteZone은 아직 미구현)
-      setSelectedZoneId(null);
-      await fetchZones();
-      setShowComplete(true);
-    } catch (err) {
-      setPopupError('위험 구역 삭제 실패: ' + (err.response?.data?.detail || err.message));
-    }
-  };
-
-  // 8) DangerZoneSelector에서 비율 좌표를 받아서 저장
-  const handleDangerComplete = ratioPoints => {
-    // DangerZoneSelector에서 이미 비율로 변환된 좌표를 받음
-    setSelectedZone(ratioPoints);
-    setShowInstruction(configAction === 'create');
-  };
-
-  // 8-1) 이미지 크기 정보 저장
-  const handleImageLoad = (sizeInfo) => {
-    setImageSize(sizeInfo);
-  };
-
-  // 9) ZoneConfigPanel 액션(조회/생성/수정/삭제) 선택
-  const handleActionSelect = action => {
-    setConfigAction(action);
-    if (action === 'create') setNewZoneName('');  // 생성 모드 시 이름 초기화
-    if (action !== 'view') setZones([]);
-    setShowInstruction(action === 'create');
-  };
-
-  // 10) 생성/수정/삭제 확정
-  const handleConfirm = async () => {
-    if (configAction === 'create') await handleCreateZone();
-    if (configAction === 'update') await handleUpdateZone();
-    if (configAction === 'delete') await handleDeleteZone();
-    setConfigAction(null);
-    setSelectedZone([]);
-    setSelectedZoneId(null);
-    setIsDangerMode(false);
-  };
-
-  // 10) 완료 메시지 자동 숨김(3초후)
-  useEffect(() => {
-    if (!showComplete) return;
-    const t = setTimeout(() => setShowComplete(false), 3000);
-    return () => clearTimeout(t);
-  }, [showComplete]);
+    // 컴포넌트가 언마운트될 때 WebSocket 연결을 정리하는 cleanup 함수입니다.
+    // React.StrictMode에서는 이 cleanup 함수가 조기에 호출될 수 있으며,
+    // 이로 인해 'WebSocket is closed before the connection is established'
+    // 라는 경고가 개발 중에 표시될 수 있습니다. 이는 StrictMode의 정상적인 동작이며,
+    // 프로덕션 빌드에서는 발생하지 않습니다.
+    return () => {
+      console.log("WebSocket 연결 정리...");
+      // 이벤트 핸들러를 먼저 null로 설정하여, close() 이후에
+      // 예기치 않은 이벤트가 발생하는 것을 방지합니다.
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onerror = null;
+      socket.onclose = null;
+      socket.close();
+    };
+  }, []); // 의존성 배열을 비워 최초 1회만 실행되도록 수정
 
   return (
     <div className="dashboard">
@@ -309,174 +152,92 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* WebSocket 연결 상태 표시 */}
+      {/* WebSocket 상태 */}
       <div className="ws-status">
         {wsStatus === 'connecting' && '🔄 연결 중...'}
-        {wsStatus === 'open'       && '✅ 연결됨'}
-        {wsStatus === 'closed'     && '⛔ 연결 끊김'}
-        {wsStatus === 'error'      && `❌ 오류 발생: ${wsError?.message}`}
+        {wsStatus === 'open' && '✅ 연결됨'}
+        {wsStatus === 'closed' && '⛔ 연결 끊김'}
+        {wsStatus === 'error' && '❌ 오류 발생'}
       </div>
 
-      {/* Main */}
+      {/* 메인 레이아웃 */}
       <div className="main-layout">
-        {/* 왼쪽: 비디오 스트림 + 선택도구 + 오버레이 */}
+        {/* 왼쪽 패널 */}
         <div className="left-panel">
-          <div
-            className="live-stream-wrapper dz-wrapper"
-            style={{ position: 'relative' }}
-          >
-            {isDangerMode && (configAction==='create'||configAction==='update')
-              ? (
-                <DangerZoneSelector
+          <div className="live-stream-wrapper">
+            {isDangerMode && (configAction === 'create' || configAction === 'update') ? (
+              <DangerZoneSelector
+                onComplete={
+                  configAction === 'create' 
+                    ? handleCreateZone 
+                    : handleUpdateZone
+                }
+                onImageLoad={setImageSize}
+              />
+            ) : (
+              <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                <LiveStreamContent
                   eventId={activeId}
-                  onComplete={handleDangerComplete}
-                  onImageLoad={handleImageLoad}
+                  onImageLoad={setImageSize}
                 />
-              ) : (
-                <LiveStreamContent eventId={activeId} onImageLoad={handleImageLoad} />
-              )
-            }
-
-            {/* 안내 메시지 */}
-            {isDangerMode && configAction==='create' && showInstruction && (
-              <div className="center-message">
-                ⚠️ 클릭하여 점을 찍어 위험 구역을 생성하세요!
+                <ZoneOverlay 
+                  zones={zones} 
+                  selectedZoneId={selectedZoneId} 
+                />
               </div>
             )}
-
-            {/* 완료 메시지 */}
-            {showComplete && (
-              <div className="center-message">
-                ✅ 작업이 완료되었습니다!
-              </div>
-            )}
-            {showComplete && <div className="center-message">✅ 작업이 완료되었습니다!</div>}
           </div>
         </div>
 
-        {/* 오른쪽: 로그 테이블 또는 설정 패널 */}
+        {/* 오른쪽 패널 */}
         <div className="right-panel">
-          {!isDangerMode ? (
+          {loading ? <div className="loading">로딩 중…</div> :
+           error ? <div className="error">{error}</div> :
+           !isDangerMode ? (
             <>
-              {loading && !logs.length ? (
-                <div className="loading">로그를 불러오는 중…</div>
-              ) : error ? (
-                <div className="error">{error}</div>
-              ) : (
-                <VideoLogTable logs={logs} activeId={activeId} onSelect={setActiveId} />
-              )}
+              <VideoLogTable logs={logs} activeId={activeId} onSelect={setActiveId} />
               <ConveyorMode
                 operationMode={operationMode}
                 loading={loading}
                 onStartAutomatic={() => handleControl('start_automatic')}
                 onStartMaintenance={() => handleControl('start_maintenance')}
                 onStop={() => handleControl('stop')}
-                onDangerMode={() => setIsDangerMode(true)}
+                onDangerMode={enterDangerMode}
               />
             </>
           ) : (
-            <>
-              <ZoneConfigPanel
-                zones={zones}
-                selected={selectedZoneId}
-                onSelect={setSelectedZoneId}
-                currentAction={configAction}
-                onActionSelect={setConfigAction}
-                onDelete={handleDeleteZone}
-                onCancel={() => setIsDangerMode(false)}
-              />
-              {configAction==='create' && (
-                <div className="zone-input-container">
-                  <input
-                    type="text"
-                    placeholder="구역 이름을 입력하세요"
-                    value={newZoneName}
-                    onChange={e => setNewZoneName(e.target.value)}
-                    className="zone-name-input"
-                  />
-                  <button className="confirm-btn" onClick={handleConfirm}>생성 완료</button>
-                </div>
-              )}
-              {configAction==='update' && (
-                <button className="confirm-btn" onClick={handleConfirm}>업데이트 완료</button>
-              )}
-              {configAction==='delete' && (
-                <button className="confirm-btn" onClick={handleConfirm}>삭제 완료</button>
-              )}
-            </>
+            <ZoneConfigPanel
+              zones={zones}
+              selected={selectedZoneId}
+              onSelect={setSelectedZoneId}
+              currentAction={configAction}
+              onActionSelect={setConfigAction}
+              newZoneName={newZoneName}
+              onNameChange={setNewZoneName}
+              onDelete={handleDeleteZone}
+              onCancel={exitDangerMode}
+            />
           )}
         </div>
       </div>
 
-
-      {/* 에러 팝업 모달 */}
-      {popupError && (
-        <div className="error-popup-overlay">
-          <div className="error-popup">
-            <div className="error-popup-header">
-              <span>⚠️ 작업 실패 ⚠️</span>
-              <button onClick={() => setPopupError(null)}>&times;</button>
-            </div>
-            <div className="error-popup-content">
-              {popupError}
-            </div>
-            <div className="error-popup-content">{popupError}</div>
+      {/* 모달 및 긴급 알림 */} 
+      {globalAlert && (
+        <div className={`global-alert ${globalAlert.log_risk_level?.toLowerCase()}`}>
+          <div className="global-alert-content">
+            <h2>{globalAlert.log_risk_level}</h2>
+            <p>{globalAlert.details?.description || '긴급 상황 발생!'}</p>
+            <span>({new Date(globalAlert.timestamp).toLocaleTimeString()})</span>
           </div>
         </div>
       )}
-
-      {/* 로그아웃 확인 모달 */}
+      <ErrorPopup message={popupError} onClose={() => setPopupError(null)} />
       {showLogoutModal && (
-        <div className="logout-overlay">
-          <div className="logout-modal">
-            <div className="logout-title">로그아웃 하시겠습니까?</div>
-            <div className="logout-buttons">
-              <button className="logout-yes" onClick={() => navigate('/login')}>네</button>
-              <button className="logout-no" onClick={() => setShowLogoutModal(false)}>아니요</button>
-            </div>
-          </div>
-        </div>
+        <LogoutModal
+          onConfirm={() => navigate('/login')}
+          onCancel={() => setShowLogoutModal(false)}
+        />
       )}
     </div>
-  );
-}
-
-// ZoneOverlay: 캔버스에 위험 구역 폴리곤을 그리는 컴포넌트
-function ZoneOverlay({ ratios }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    const canvas = ref.current;
-    const ctx    = canvas.getContext('2d');
-    const rect   = canvas.getBoundingClientRect();
-    const dpr    = window.devicePixelRatio || 1;
-    canvas.width  = rect.width  * dpr;
-    canvas.height = rect.height * dpr;
-    ctx.scale(dpr, dpr);
-    ctx.clearRect(0,0,rect.width,rect.height);
-    if (!ratios || ratios.length < 3) return;
-    const pts = ratios.map(p => ({
-      x: p.xRatio * rect.width,
-      y: p.yRatio * rect.height
-    }));
-    ctx.fillStyle   = 'rgba(0,255,0,0.2)';
-    ctx.strokeStyle = 'rgba(0,255,0,0.8)';
-    ctx.lineWidth   = 2;
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    pts.slice(1).forEach(pt => ctx.lineTo(pt.x, pt.y));
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-  }, [ratios]);
-  return (
-    <canvas
-      ref={ref}
-      style={{
-        position: 'absolute',
-        top: 0, left: 0,
-        width: '100%', height: '100%',
-        pointerEvents: 'none'
-      }}
-    />
   );
 }

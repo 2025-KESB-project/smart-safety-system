@@ -81,14 +81,15 @@ export function useWebSocket(
 
     return () => {
       console.log("8. [WS-Debug] useEffect 클린업 함수 실행. 연결을 종료합니다.");
+      // 재연결 로직을 중단시키기 위해 플래그를 설정합니다.
       shouldReconnect.current = false;
+      // 타이머가 있다면 제거합니다.
       clearTimeout(reconnectTimer.current);
-      // StrictMode에서 조기에 연결이 끊어지는 것을 방지하기 위해 명시적으로 close()를 호출하지 않습니다.
-      // 컴포넌트가 완전히 언마운트되면 브라우저가 연결을 정리하고 onclose 이벤트가 발생하며,
-      // shouldReconnect 플래그에 따라 재연결이 방지됩니다.
-      // if (wsRef.current) {
-      //   wsRef.current.close();
-      // }
+      // StrictMode의 이중 호출 문제를 피하기 위해, 여기서 직접 close()를 호출하는 대신
+      // onclose 핸들러가 shouldReconnect 플래그를 확인하여 재연결을 막도록 합니다.
+      if (wsRef.current) {
+          wsRef.current.close();
+      }
     };
   }, [connect]);
 

@@ -65,8 +65,6 @@ async def run_safety_system(app: FastAPI):
     while True:
         try:
             # 1. 영상 프레임 및 센서 데이터 획득 (항상 실행)
-            # 참고: 이 부분은 동기적이므로, CPU 사용량이 매우 높을 경우
-            # asyncio.to_thread (Python 3.9+)를 사용하여 실행하는 것을 고려할 수 있습니다.
             input_data = input_adapter.get_input()
             if input_data is None or input_data.get('raw_frame') is None:
                 logger.warning("입력 스트림으로부터 프레임을 가져올 수 없습니다. 1초 후 재시도...")
@@ -78,18 +76,16 @@ async def run_safety_system(app: FastAPI):
 
             # 2. 시스템 활성화 상태일 때만 안전 로직 및 시각화 수행
             if state_manager.is_active():
+                # ... (이하 로직은 동일) ...
                 current_status = state_manager.get_status()
                 current_mode = current_status.get("operation_mode")
                 conveyor_is_on = current_status.get("conveyor_is_on", False)
                 conveyor_speed = current_status.get("conveyor_speed", 100)
                 sensor_data = input_data['sensor_data']
 
-                # 객체 탐지
                 detection_result = detector.detect(raw_frame)
-                # 최신 탐지 결과를 앱 상태에 저장하여 API 등 다른 곳에서 접근할 수 있도록 함
                 app.state.latest_detection_result = detection_result
 
-                # 로직 처리 (두뇌에게 판단 요청)
                 actions = logic_facade.process(
                     detection_result=detection_result,
                     sensor_data=sensor_data,
@@ -98,7 +94,6 @@ async def run_safety_system(app: FastAPI):
                     current_conveyor_speed=conveyor_speed
                 )
 
-                # 액션 실행 (조정자가 실행 분배)
                 control_actions = []
                 for action in actions:
                     action_type = action.get("type")
@@ -107,12 +102,8 @@ async def run_safety_system(app: FastAPI):
                     
                     elif action_type and action_type.startswith('LOG_'):
                         risk_factors = logic_facade.last_risk_analysis.get("risk_factors", [])
-                        
-                        # 로그 레벨과 설명을 결정
-                        log_risk_level = "INFO"  # 기본값
+                        log_risk_level = "INFO"
                         description = "System is operating normally."
-
-                        # 가장 중요한 위험 사실 하나를 찾아 설명과 레벨을 설정
                         if any(f["type"] == "POSTURE_FALLING" for f in risk_factors):
                             log_risk_level = "CRITICAL"
                             description = "A person falling has been detected."
@@ -132,24 +123,20 @@ async def run_safety_system(app: FastAPI):
                         event_data = {
                             "event_type": action_type,
                             "details": {"description": description},
-                            "log_risk_level": log_risk_level
+                            "risk_level": log_risk_level
                         }
                         await db_service.log_event(event_data)
                     
-                    elif action_type == 'NOTIFY_UI':
-                        await websocket_service.broadcast_to_channel('alerts', action.get("details", {}))
+                    
 
                 if control_actions:
                     control_facade.execute_actions(control_actions)
 
-                # 시각화 및 스트리밍 프레임 업데이트
                 display_frame = detector.draw_detections(raw_frame, detection_result)
                 
-                # 최종 상태를 다시 가져와서 화면에 표시
                 final_status = state_manager.get_status()
                 mode_text = f"Mode: {final_status.get('operation_mode', 'N/A')}"
                 
-                # 속도와 전원 상태를 조합하여 더 상세한 상태 텍스트 생성
                 is_on = final_status.get('conveyor_is_on', False)
                 speed = final_status.get('conveyor_speed', 100)
                 
@@ -169,11 +156,9 @@ async def run_safety_system(app: FastAPI):
                 cv2.putText(display_frame, risk_text, (15, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, risk_color, 2)
             
             else:
-                # 시스템이 비활성화 상태일 때 대기하며 화면에 상태 표시
                 cv2.putText(display_frame, "SYSTEM INACTIVE", (15, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
                 await asyncio.sleep(0.5)
 
-            # 3. 최신 프레임을 전역 변수에 업데이트 (항상 실행)
             latest_frame = display_frame.copy()
             await asyncio.sleep(0.01)
 

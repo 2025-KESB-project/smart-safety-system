@@ -9,6 +9,7 @@ const useDashboardStore = create((set, get) => ({
   loading: false,
   error: null,
   popupError: null,
+  globalAlert: null, // 긴급 알림용 상태
 
   // --- UI 상태 ---
   activeId: null,
@@ -43,7 +44,23 @@ const useDashboardStore = create((set, get) => ({
 
   // --- 로그 관련 액션 ---
   addLog: (newLog) => {
+    // 1. 항상 로그 목록에는 추가합니다.
     set(state => ({ logs: [newLog, ...state.logs] }));
+
+    // 2. 위험 등급을 확인하여 긴급 알림을 설정합니다.
+    const riskLevel = newLog?.log_risk_level;
+    if (riskLevel === 'CRITICAL' || riskLevel === 'HIGH') {
+      set({ globalAlert: newLog });
+
+      // 10초 후에 알림을 자동으로 닫습니다.
+      setTimeout(() => {
+        // 현재 알림이 방금 설정한 알림과 동일할 때만 닫습니다.
+        // (그 사이에 새로운 알림이 떴을 경우를 대비)
+        if (get().globalAlert?.id === newLog.id) {
+          set({ globalAlert: null });
+        }
+      }, 10000);
+    }
   },
   setActiveId: (id) => set({ activeId: id }),
 
@@ -85,19 +102,31 @@ const useDashboardStore = create((set, get) => ({
 
   // --- 위험 구역 CRUD 액션 ---
   handleCreateZone: async (ratioPoints) => {
-    const { zones, newZoneName, imageSize } = get();
-    const name = newZoneName.trim() || `Zone ${zones.length + 1}`;
+    const { newZoneName, imageSize } = get();
+    const name = newZoneName.trim() || `Zone ${Date.now()}`;
     const points = ratioPoints.map(r => ({
       x: Math.round(r.x * (imageSize?.naturalWidth || 1)),
       y: Math.round(r.y * (imageSize?.naturalHeight || 1)),
     }));
 
+    // 백엔드에 보낼 데이터 객체 생성 (id 포함)
+    const newZoneData = {
+      id: `zone_${Date.now()}`, // 프론트에서 고유 ID 생성
+      name,
+      points,
+    };
+
     try {
-      await zoneAPI.saveZones([{ name, points }]);
+      await zoneAPI.createZone(newZoneData);
       await get().fetchZones(); // 목록 새로고침
       get().exitDangerMode();
     } catch (err) {
-      get().setPopupError('위험 구역 생성 실패: ' + (err.response?.data?.detail || err.message));
+      const errorDetail = err.response?.data?.detail || err.message;
+      // 에러 상세 정보가 객체나 배열일 경우, 읽기 좋은 JSON 문자열로 변환합니다.
+      const errorMessage = typeof errorDetail === 'object' 
+        ? JSON.stringify(errorDetail, null, 2)
+        : errorDetail;
+      get().setPopupError('위험 구역 생성 실패:\n' + errorMessage);
     }
   },
 
@@ -118,7 +147,11 @@ const useDashboardStore = create((set, get) => ({
       await get().fetchZones();
       get().exitDangerMode();
     } catch (err) {
-      get().setPopupError('위험 구역 업데이트 실패: ' + (err.response?.data?.detail || err.message));
+      const errorDetail = err.response?.data?.detail || err.message;
+      const errorMessage = typeof errorDetail === 'object' 
+        ? JSON.stringify(errorDetail, null, 2)
+        : errorDetail;
+      get().setPopupError('위험 구역 업데이트 실패:\n' + errorMessage);
     }
   },
 
@@ -131,10 +164,15 @@ const useDashboardStore = create((set, get) => ({
 
     try {
       await zoneAPI.deleteZone(selectedZoneId);
-      await get().fetchZones();
-      get().exitDangerMode();
+      await get().fetchZones(); // 목록 새로고침
+      // 성공 후 상태 초기화
+      set({ isDangerMode: false, configAction: null, selectedZoneId: null }); 
     } catch (err) {
-      get().setPopupError('위험 구역 삭제 실패: ' + (err.response?.data?.detail || err.message));
+      const errorDetail = err.response?.data?.detail || err.message;
+      const errorMessage = typeof errorDetail === 'object' 
+        ? JSON.stringify(errorDetail, null, 2)
+        : errorDetail;
+      get().setPopupError('위험 구역 삭제 실패:\n' + errorMessage);
     }
   },
   

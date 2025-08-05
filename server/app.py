@@ -94,10 +94,10 @@ async def lifespan(app: FastAPI):
         # 나머지 서비스들을 생성합니다.
         app.state.websocket_service = WebSocketService()
         app.state.db_service = DBService(db=db_client, loop=app.state.loop, websocket_service=app.state.websocket_service)
-        zone_service = ZoneService(db=db_client)
+        app.state.zone_service = ZoneService(db=db_client)
         
         # 나머지 Facade들을 생성합니다.
-        app.state.detector = Detector(config=CONFIG.get('detector', {}), zone_service=zone_service)
+        app.state.detector = Detector(config=CONFIG.get('detector', {}), zone_service=app.state.zone_service)
         app.state.logic_facade = LogicFacade(config=CONFIG)
         
         logger.success("모든 서비스 및 로직 모듈 초기화 완료.")
@@ -129,7 +129,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost", "http://localhost:3000", "http://localhost:8080"],
+    allow_origins=["*"],  # 모든 출처에서의 연결을 허용
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
