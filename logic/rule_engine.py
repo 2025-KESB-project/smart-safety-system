@@ -13,29 +13,26 @@ class RuleEngine:
         """
         self.config = config or {}
         self.last_logged_state = None # 마지막으로 로깅한 상태를 저장
+        self.last_risk_factors = set() # 마지막 위험 요소를 기억하여 상태 변화를 감지
         logger.info("RuleEngine 초기화 완료. (사실 기반)")
 
     def decide_actions(self, mode: str, risk_analysis: Dict[str, Any], conveyor_is_on: bool, current_speed_percent: int) -> List[Dict[str, Any]]:
         """
         현재 상태에 따라 수행해야 할 행동 목록을 결정합니다.
-
-        Args:
-            mode: SystemStateManager가 제공하는 현재 작업 모드 ('AUTOMATIC' or 'MAINTENANCE')
-            risk_analysis: RiskEvaluator가 평가한 위험 사실 목록
-            conveyor_is_on: 현재 컨베이어 전원 상태
-            current_speed_percent: 현재 컨베이어 속도 (%)
-
-        Returns:
-            수행할 행동을 나타내는 딕셔너리 리스트
         """
         actions = []
         risk_factors = risk_analysis.get("risk_factors", [])
+        current_risk_types = {f["type"] for f in risk_factors}
+
+        # --- 상태 변화 감지: 새로 생기거나 사라진 위험이 무엇인지 파악 ---
+        newly_detected_risks = current_risk_types - self.last_risk_factors
+        cleared_risks = self.last_risk_factors - current_risk_types
         
         # --- 위험 사실 존재 여부 확인 ---
-        has_intrusion = any(f["type"] == "ZONE_INTRUSION" for f in risk_factors)
-        is_falling = any(f["type"] == "POSTURE_FALLING" for f in risk_factors)
-        is_crouching = any(f["type"] == "POSTURE_CROUCHING" for f in risk_factors)
-        has_sensor_alert = any(f["type"] == "SENSOR_ALERT" for f in risk_factors)
+        has_intrusion = "ZONE_INTRUSION" in current_risk_types
+        is_falling = "POSTURE_FALLING" in current_risk_types
+        is_crouching = "POSTURE_CROUCHING" in current_risk_types
+        has_sensor_alert = "SENSOR_ALERT" in current_risk_types
 
         # --- 규칙 정의 ---
         log_action = None
@@ -45,38 +42,44 @@ class RuleEngine:
             reason = "falling_detected" if is_falling else "sensor_alert"
             log_type = "LOG_CRITICAL_FALLING" if is_falling else "LOG_CRITICAL_SENSOR"
             actions.append({"type": "POWER_OFF", "details": {"reason": reason}})
-            actions.append({"type": "TRIGGER_ALARM_CRITICAL", "details": {"reason": reason}})
+            # 비상 상황은 새로 감지되었을 때만 경고를 울립니다.
+            if newly_detected_risks:
+                actions.append({"type": "TRIGGER_ALARM_CRITICAL", "details": {"reason": reason}})
             log_action = {"type": log_type, "details": {}}
 
         # 규칙 1: 정비(MAINTENANCE) 모드 - LOTO(Lock-Out, Tag-Out) 로직
         elif mode == "MAINTENANCE":
             # 정비 모드에서는 침입 여부와 관계없이 항상 전원을 차단합니다.
-            # 전원이 켜져 있을 때만 POWER_OFF 명령을 내립니다.
             if conveyor_is_on:
                 actions.append({"type": "POWER_OFF", "details": {"reason": "maintenance_mode_active"}})
             
-            if has_intrusion:
-                # 침입이 있을 경우, 추가적으로 경고 및 로깅
+            # 정비 중 침입은 새로 감지되었을 때만 경고합니다.
+            if has_intrusion and "ZONE_INTRUSION" in newly_detected_risks:
                 actions.append({"type": "TRIGGER_ALARM_CRITICAL", "details": {"reason": "LOTO_zone_intrusion"}})
-                log_action = {"type": "LOG_LOTO_ACTIVE", "details": {}}
-            else:
-                # 침입이 없을 경우, 안전 상태 로깅
-                log_action = {"type": "LOG_MAINTENANCE_SAFE", "details": {}}
+            log_action = {"type": "LOG_LOTO_ACTIVE", "details": {}}
 
         # 규칙 2: 운전(AUTOMATIC) 모드
         elif mode == "AUTOMATIC":
             if has_intrusion:
-                # 속도가 50%가 아닐 때만 감속 명령을 내립니다.
                 if current_speed_percent != 50:
                     actions.append({"type": "REDUCE_SPEED_50", "details": {"reason": "zone_intrusion"}})
-                actions.append({"type": "TRIGGER_ALARM_HIGH", "details": {"reason": "intrusion"}})
+                # 침입이 새로 감지되었을 때만 경고를 시작합니다.
+                if "ZONE_INTRUSION" in newly_detected_risks:
+                    actions.append({"type": "TRIGGER_ALARM_HIGH", "details": {"reason": "intrusion"}})
                 log_action = {"type": "LOG_INTRUSION_SLOWDOWN", "details": {}}
             elif is_crouching:
-                # 웅크린 자세는 위험 구역 밖에서는 경고만.
-                actions.append({"type": "TRIGGER_ALARM_MEDIUM", "details": {"reason": "crouching"}})
+                # 웅크림이 새로 감지되었을 때만 경고를 시작합니다.
+                if "POSTURE_CROUCHING" in newly_detected_risks:
+                    actions.append({"type": "TRIGGER_ALARM_MEDIUM", "details": {"reason": "crouching"}})
                 log_action = {"type": "LOG_CROUCHING_WARN", "details": {}}
             else:
                 # 운전 모드이고, 아무 위험이 없으면 정상 운전
+                # 이전에 울리던 경고가 있었다면, 모두 끄는 액션을 추가합니다.
+                if "ZONE_INTRUSION" in cleared_risks:
+                    actions.append({"type": "STOP_ALARM_HIGH"})
+                if "POSTURE_CROUCHING" in cleared_risks:
+                    actions.append({"type": "STOP_ALARM_MEDIUM"})
+
                 # 전원이 꺼져 있을 때만 POWER_ON 명령을 내립니다.
                 if not conveyor_is_on:
                     actions.append({"type": "POWER_ON", "details": {"reason": "normal_operation"}})
@@ -90,25 +93,22 @@ class RuleEngine:
         # --- 로깅 및 UI 알림 처리 ---
         
         # 1. 상태가 변경되었을 때만 로그 액션을 추가
-        factor_types = sorted([f["type"] for f in risk_factors])
-        #AUTOMATIC-ZONE_INTRUSION 예시
-        current_state = f"{mode}-{','.join(factor_types)}"
-        if current_state != self.last_logged_state and log_action:
+        current_state_str = f"{mode}-{','.join(sorted(current_risk_types))}"
+        if current_state_str != self.last_logged_state and log_action:
             actions.append(log_action)
-            self.last_logged_state = current_state
+            self.last_logged_state = current_state_str
 
-        # 2. 위험 상황에 대해 UI 알림 (중복 알림 방지 필요 시 추가 로직 구현)
-        if risk_factors:
-            # UI에 보낼 가장 중요한 알림 하나를 선택 (예: 넘어짐/센서 > 침입 > 웅크림)
+        # 2. 위험이 새로 감지되었을 때만 UI 알림을 보냅니다.
+        if newly_detected_risks:
             level = "safe"
             message = ""
-            if is_falling:
+            if "POSTURE_FALLING" in newly_detected_risks:
                 level, message = "critical", "넘어짐 감지! 즉시 정지합니다."
-            elif has_sensor_alert:
+            elif "SENSOR_ALERT" in newly_detected_risks:
                 level, message = "critical", "비상 센서 감지! 즉시 정지합니다."
-            elif has_intrusion:
+            elif "ZONE_INTRUSION" in newly_detected_risks:
                 level, message = "high", "위험 구역 침입 감지!"
-            elif is_crouching:
+            elif "POSTURE_CROUCHING" in newly_detected_risks:
                 level, message = "medium", "웅크린 자세 감지. 주의가 필요합니다."
 
             if level != "safe":
@@ -119,5 +119,8 @@ class RuleEngine:
                     "timestamp": datetime.now().isoformat()
                 }
                 actions.append({"type": "NOTIFY_UI", "details": notification_details})
+
+        # 마지막 위험 상태를 현재 상태로 업데이트합니다.
+        self.last_risk_factors = current_risk_types
 
         return actions

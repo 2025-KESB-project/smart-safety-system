@@ -53,36 +53,45 @@ async def run_safety_system(app: FastAPI):
     # 최초 실행 시 컨베이어 전원을 끄고 시스템 상태를 기록합니다.
     logger.info("안전 초기화: 컨베이어 전원을 OFF 상태로 시작합니다.")
     control_facade.execute_actions([{"type": "POWER_OFF"}])
-    await db_service.log_event({
+    db_service.log_event({
         "event_type": "LOG_SYSTEM_INITIALIZED", 
         "details": {"message": "System worker started, conveyor forced OFF."}
     })
 
     while True:
         try:
-            # 1. 영상 프레임 및 센서 데이터 획득 (항상 실행)
-            # 참고: 이 부분은 동기적이므로, CPU 사용량이 매우 높을 경우
-            # asyncio.to_thread (Python 3.9+)를 사용하여 실행하는 것을 고려할 수 있습니다.
-            input_data = input_adapter.get_input()
-            if input_data is None or input_data.get('raw_frame') is None:
+            # 1. (신규) 아두이노의 자율 제어 이벤트 확인 및 처리
+            status_events = input_adapter.get_status_events()
+            for event in status_events:
+                if event.get("source") == "AUTO" and event.get("power") == "OFF":
+                    logger.warning(f"Arduino 자율 전원 차단 감지! 시스템을 즉시 중지합니다. 이벤트: {event}")
+                    state_manager.force_stop()
+                    db_service.log_event({
+                        "event_type": "LOG_SYSTEM_FORCED_STOP",
+                        "details": {"message": "Arduino autonomous power OFF detected.", "event": event},
+                        "log_risk_level": "CRITICAL"
+                    })
+
+            # 2. 영상 프레임 획득
+            raw_frame = input_adapter.get_frame()
+            if raw_frame is None:
                 logger.warning("입력 스트림으로부터 프레임을 가져올 수 없습니다. 1초 후 재시도...")
                 await asyncio.sleep(1)
                 continue
             
-            raw_frame = input_data['raw_frame']
             display_frame = raw_frame.copy()
 
-            # 2. 시스템 활성화 상태일 때만 안전 로직 및 시각화 수행
+            # 3. 시스템 활성화 상태일 때만 안전 로직 및 시각화 수행
             if state_manager.is_active():
+                # 센서 데이터는 필요할 때만 별도로 획득
+                sensor_data = input_adapter.get_sensor_data()
                 current_status = state_manager.get_status()
                 current_mode = current_status.get("operation_mode")
                 conveyor_is_on = current_status.get("conveyor_is_on", False)
                 conveyor_speed = current_status.get("conveyor_speed", 100)
-                sensor_data = input_data['sensor_data']
 
                 # 객체 탐지
                 detection_result = detector.detect(raw_frame)
-                # 최신 탐지 결과를 앱 상태에 저장하여 API 등 다른 곳에서 접근할 수 있도록 함
                 app.state.latest_detection_result = detection_result
 
                 # 로직 처리 (두뇌에게 판단 요청)
@@ -130,10 +139,13 @@ async def run_safety_system(app: FastAPI):
                             "details": {"description": description},
                             "log_risk_level": log_risk_level
                         }
-                        await db_service.log_event(event_data)
+                        db_service.log_event(event_data)
                     
                     elif action_type == 'NOTIFY_UI':
-                        await websocket_service.broadcast_to_channel('alerts', action.get("details", {}))
+                        asyncio.run_coroutine_threadsafe(
+                            websocket_service.broadcast_to_channel('alerts', action.get("details", {})),
+                            loop
+                        )
 
                 if control_actions:
                     control_facade.execute_actions(control_actions)

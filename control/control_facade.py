@@ -76,6 +76,13 @@ class ControlFacade:
                     self.alert_controller.trigger_alert(level=alert_level, message=reason)
                 except ValueError:
                     logger.error(f"알 수 없는 경고 레벨 문자열: '{level_str}'")
+            elif action_type.startswith("STOP_ALARM_"):
+                level_str = action_type.replace("STOP_ALARM_", "").lower()
+                try:
+                    alert_level = AlertLevel(level_str)
+                    self.alert_controller.stop_alert(level=alert_level)
+                except ValueError:
+                    logger.error(f"알 수 없는 경고 중지 레벨 문자열: '{level_str}'")
             else:
                 logger.warning(f"알 수 없는 제어 액션 타입 '{action_type}'은 무시됩니다.")
 

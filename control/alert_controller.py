@@ -49,7 +49,7 @@ class AlertController:
     def trigger_alert(self, level: AlertLevel, message: str = ""):
         """
         지정된 위험 수준에 따라 피에조 부저 경고를 발생시킵니다.
-        한 번 발생한 경고는 지정된 시간이 지날 때까지 다시 발생하지 않습니다.
+        이미 해당 경고가 울리고 있으면 아무것도 하지 않습니다.
         """
         if not isinstance(level, AlertLevel):
             logger.error(f"잘못된 경고 수준: {level}")
@@ -57,11 +57,12 @@ class AlertController:
 
         with self._lock:
             if self.is_alerting[level]:
+                # logger.debug(f"[{level.value.upper()}] 경고가 이미 활성화 상태입니다.")
                 return # 이미 경고 중이면 중복 실행 방지
 
             # 경고 시작
             self.is_alerting[level] = True
-            logger.info(f"[{level.value.upper()}] 경고 발생. 장치: {AlertDevice.PIEZO_BUZZER.value}, 지속 시간: {self.alert_duration}초")
+            logger.info(f"[{level.value.upper()}] 경고 발생. 장치: {AlertDevice.PIEZO_BUZZER.value}")
 
             # 피에조 부저 명령 전송
             if not self.mock_mode:
@@ -72,19 +73,35 @@ class AlertController:
 
             self._activate_device_internal()
 
-            # 지정된 시간 후 경고 해제 타이머 설정
-            threading.Timer(self.alert_duration, self._deactivate_alert, args=[level]).start()
+    def stop_alert(self, level: AlertLevel):
+        """
+        지정된 레벨의 경고를 중지합니다.
+        """
+        if not isinstance(level, AlertLevel):
+            logger.error(f"잘못된 경고 수준: {level}")
+            return
+
+        with self._lock:
+            if not self.is_alerting[level]:
+                return # 경고가 울리고 있지 않으면 아무것도 하지 않음
+
+            logger.info(f"[{level.value.upper()}] 경고 중지.")
+            self.is_alerting[level] = False
+            self._deactivate_alert_internal()
+
+            if not self.mock_mode:
+                # 아두이노에 부저 정지 명령 전송 (예: b_stop)
+                self.communicator.send_command("b_stop")
+                logger.info("피에조 부저 정지 명령 전송: b_stop")
 
     def _activate_device_internal(self):
         """(내부용) 부저 장치를 활성화 상태로 변경합니다."""
         self.device_status[AlertDevice.PIEZO_BUZZER.value] = "active"
 
-    def _deactivate_alert(self, level: AlertLevel):
+    def _deactivate_alert_internal(self):
         """(내부용) 특정 레벨의 경고를 비활성화합니다."""
         with self._lock:
-            logger.info(f"[{level.value.upper()}] 경고 상태 초기화.")
             self.device_status[AlertDevice.PIEZO_BUZZER.value] = "idle"
-            self.is_alerting[level] = False
 
     def trigger_medium_alarm(self, message: str = "Medium risk detected"):
         self.trigger_alert(AlertLevel.MEDIUM, message)
@@ -94,6 +111,12 @@ class AlertController:
 
     def trigger_critical_alarm(self, message: str = "Critical risk detected"):
         self.trigger_alert(AlertLevel.CRITICAL, message)
+
+    def get_status(self) -> Dict[str, bool]:
+        """다른 컨트롤러와 일관성을 맞춘 상태 반환 메소드."""
+        # 현재 어떤 레벨의 경고라도 활성화되어 있는지 확인
+        is_alerting = any(self.is_alerting.values())
+        return {"is_alert_on": is_alerting}
 
     def get_all_statuses(self) -> Dict[str, str]:
         """모든 장치의 상태를 반환합니다."""

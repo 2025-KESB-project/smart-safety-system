@@ -86,8 +86,8 @@ class SensorReader:
                 if value is not None:
                     now = time.time()
                     self.latest_states[data_type] = {"value": value, "timestamp": now}
-                    # 데이터 버퍼에도 최신 상태 기록 (기존 로직 유지)
-                    self.data_buffer.append(self.read())
+                    # 데이터 버퍼에 추가하는 로직은 교착 상태를 유발하므로 제거합니다.
+                    # self.data_buffer.append(self.read())
 
             elif data_type == "STATUS":
                 # Case 2: 아두이노의 자율 제어 상태 보고

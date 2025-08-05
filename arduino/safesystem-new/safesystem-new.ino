@@ -104,20 +104,24 @@ void handle_serial_commands() {
       } else if (cmd.equals("b_critical")) {
         Serial.println("Command: b_critical -> Playing CRITICAL alert sound.");
         play_alert_sound(784); // 높은 솔 (G5)
+      } else if (cmd.equals("b_stop")) {
+        Serial.println("Command: b_stop -> Stopping all sounds.");
+        noTone(BUZZER_PIN);
       }
     }
   }
 }
 
 /*
- * @brief 지정된 주파수로 9번 반복되는 경고음을 재생합니다.
+ * @brief 지정된 주파수로 3번 반복되는 경고음을 재생하고, 확실히 멈춥니다.
  * @param note_frequency 재생할 음의 주파수 (Hz)
  */
 void play_alert_sound(int note_frequency) {
-  for (int i = 0; i < 9; i++) {
+  for (int i = 0; i < 3; i++) { // 반복 횟수를 3번으로 줄임
     tone(BUZZER_PIN, note_frequency, 150); // 150ms 동안 소리 재생
     delay(200); // 200ms 쉼
   }
+  noTone(BUZZER_PIN); // 함수가 끝나기 전에 부저를 확실히 끕니다.
 }
 
 /*

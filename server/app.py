@@ -16,7 +16,7 @@ from firebase_admin import credentials, firestore
 sys.path.append(str(Path(__file__).parent.parent))
 logger.remove()
 logger.add(
-    sys.stderr, level="INFO",
+    sys.stderr, level="DEBUG",
     format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}:{function}:{line}</cyan> - <level>{message}</level>"
 )
 
