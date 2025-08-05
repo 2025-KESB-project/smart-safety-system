@@ -37,7 +37,7 @@ from server.routes import log_api, streaming, alert_ws, zone_api, control_api, l
 # 중앙 설정 (CONFIG)
 # --------------------------------------------------------------------------
 CONFIG = {
-    'input': {'camera_index': 3, 'mock_mode': False},
+    'input': {'camera_index': 0, 'mock_mode': False},
     'detector': {'person_detector': {'model_path': 'yolov8n.pt'}, 'pose_detector': {'pose_model_path': 'yolov8n-pose.pt'}},
     'control': {'mock_mode': False},
     'service': {'firebase_credential_path': str(Path(__file__).parent.parent / "config" / "firebase_credential.json")}
@@ -83,19 +83,44 @@ async def lifespan(app: FastAPI):
     if app.state.db:
         db_client = app.state.db
         
-        # 제어 계층 Facade를 먼저 생성합니다.
-        app.state.control_facade = ControlFacade(mock_mode=CONFIG['control']['mock_mode'])
+        # config.py에서 설정을 가져옵니다.
+        from config import config
+        from core.serial_communicator import SerialCommunicator
+
+        # 1. 공유 SerialCommunicator 인스턴스를 생성합니다.
+        app.state.communicator = SerialCommunicator(
+            port=config.ARDUINO_PORT,
+            baud_rate=config.ARDUINO_BAUDRATE,
+            mock_mode=config.MOCK_MODE_CONTROL # 컨트롤 계층의 모의 모드를 따름
+        )
+        logger.success("공유 SerialCommunicator 초기화 완료.")
+
+        # 2. 공유 communicator를 각 Facade에 주입하여 생성합니다.
+        app.state.control_facade = ControlFacade(
+            communicator=app.state.communicator,
+            mock_mode=app.state.communicator.mock_mode
+        )
         logger.success("ControlFacade 초기화 완료.")
 
         # ControlFacade를 SystemStateManager에 주입하여 생성합니다.
         app.state.state_manager = SystemStateManager(control_facade=app.state.control_facade)
         logger.success("SystemStateManager 초기화 완료.")
 
+        # InputAdapter를 생성하고 app.state에 등록합니다.
+        from input_adapter.input_facade import InputAdapter
+        app.state.input_adapter = InputAdapter(
+            communicator=app.state.communicator,
+            use_camera=not config.MOCK_MODE_INPUT,
+            camera_index=config.CAMERA_INDEX,
+            mock_mode=config.MOCK_MODE_INPUT
+        )
+        logger.success("InputAdapter 초기화 완료.")
+
         # 나머지 서비스들을 생성합니다.
         app.state.websocket_service = WebSocketService()
         app.state.db_service = DBService(db=db_client, loop=app.state.loop, websocket_service=app.state.websocket_service)
         zone_service = ZoneService(db=db_client)
-        
+
         # 나머지 Facade들을 생성합니다.
         app.state.detector = Detector(config=CONFIG.get('detector', {}), zone_service=zone_service)
         app.state.logic_facade = LogicFacade(config=CONFIG)

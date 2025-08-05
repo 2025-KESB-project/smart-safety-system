@@ -1,14 +1,12 @@
 from loguru import logger
-from typing import Optional
-
-# from control.speed_controller import SpeedController
-from control.serial_communicator import SerialCommunicator
+from core.serial_communicator import SerialCommunicator
 
 
 class PowerController:
     """
     릴레이 모듈을 직접 제어하여 시스템의 주 전원을 ON/OFF합니다.
     SerialCommunicator를 통해 아두이노에 'p1'(ON) 또는 'p0'(OFF) 명령을 전송합니다.
+    NO 연결상태: 전원과 릴레이의 상태가 동일하다
     """
 
     def __init__(self, communicator: SerialCommunicator, mock_mode: bool = True):

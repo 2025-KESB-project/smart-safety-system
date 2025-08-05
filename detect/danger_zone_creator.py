@@ -3,7 +3,7 @@ import numpy as np
 import json
 from typing import List, Dict, Any
 from loguru import logger
-from .danger_zone_mapper import DangerZoneMapper
+from danger_zone_mapper import DangerZoneMapper
 
 class ZoneCreator:
     """사용자가 마우스로 위험 구역을 설정하도록 돕는 클래스"""
@@ -110,3 +110,58 @@ class ZoneCreator:
                 cv2.circle(overlay, tuple(point), 5, (0, 255, 255), -1)
         
         return overlay
+
+if __name__ == '__main__':
+    CONFIG_PATH = 'danger_zones.json'
+    WINDOW_NAME = 'Danger Zone Creator'
+
+    # 웹캠 열기
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        logger.error("웹캠을 열 수 없습니다.")
+        exit()
+
+    # DangerZoneMapper와 ZoneCreator 초기화
+    dz_mapper = DangerZoneMapper(CONFIG_PATH)
+    zone_creator = ZoneCreator(WINDOW_NAME, CONFIG_PATH, dz_mapper)
+
+    cv2.namedWindow(WINDOW_NAME)
+    cv2.setMouseCallback(WINDOW_NAME, zone_creator._mouse_callback)
+
+    logger.info("카메라가 준비되었습니다. 'd'를 눌러 그리기를 시작하세요.")
+    logger.info("'s'를 눌러 저장, 'c'를 눌러 취소, 'q'를 눌러 종료합니다.")
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            logger.error("프레임을 읽을 수 없습니다.")
+            break
+
+        # ZoneCreator의 피드백 그리기
+        frame = zone_creator.draw_creation_feedback(frame)
+
+        # 현재 설정된 위험 구역들을 프레임에 그림
+        frame = dz_mapper.draw_zones_on_frame(frame)
+
+        cv2.imshow(WINDOW_NAME, frame)
+        key = cv2.waitKey(1) & 0xFF
+
+        if key == ord('q'):
+            logger.info("프로그램을 종료합니다.")
+            break
+        elif key == ord('d'):
+            zone_creator.start_drawing()
+        elif key == ord('s'):
+            if zone_creator.is_drawing:
+                # 간단한 ID와 이름 생성 (실제 앱에서는 더 정교한 방법 사용)
+                zone_id = f"zone_{len(dz_mapper.get_all_zones()) + 1}"
+                zone_name = f"위험 구역 {len(dz_mapper.get_all_zones()) + 1}"
+                if zone_creator.save_current_zone(zone_id, zone_name):
+                    logger.success(f"'{zone_name}'이(가) 저장되었습니다.")
+                else:
+                    logger.warning("저장에 실패했습니다.")
+        elif key == ord('c'):
+            zone_creator.cancel_drawing()
+
+    cap.release()
+    cv2.destroyAllWindows()

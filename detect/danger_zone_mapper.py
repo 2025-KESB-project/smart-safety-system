@@ -3,16 +3,11 @@ import cv2
 import numpy as np
 from typing import List, Dict, Any, Tuple
 from loguru import logger
+import threading
 
 # 의존성 주입을 위해 ZoneService를 import 합니다.
 # 실제 애플리케이션에서는 FastAPI의 Depends 등을 통해 주입받게 됩니다.
 from server.services.zone_service import ZoneService
-
-import cv2
-import numpy as np
-from typing import List, Dict, Any, Tuple
-from loguru import logger
-import threading
 
 class DangerZoneMapper:
     """다각형 위험 구역을 설정하고, 사람의 침입 여부를 정교하게 판단합니다.
@@ -34,7 +29,7 @@ class DangerZoneMapper:
         if self.zone_service:
             # 1. 초기 데이터 로드 (기존 방식 유지)
             self.load_zones_from_db()
-            
+
             # 2. 실시간 업데이트를 위한 리스너 등록
             self.zone_service.register_listener(self._on_snapshot_callback)
         else:
@@ -43,7 +38,7 @@ class DangerZoneMapper:
     def _on_snapshot_callback(self, doc_snapshot, changes, read_time):
         """Firestore on_snapshot 이벤트 발생 시 호출되는 콜백 함수입니다."""
         logger.info(f"실시간 변경 감지: {len(doc_snapshot)}개의 위험 구역 데이터로 업데이트합니다.")
-        
+
         new_zones = []
         for doc in doc_snapshot:
             try:
@@ -88,7 +83,7 @@ class DangerZoneMapper:
             new_zones = []
             for zone_data in zones_data:
                 self.add_zone(zone_data, new_zones)
-            
+
             with self._lock:
                 self.danger_zones = new_zones
             
@@ -119,7 +114,7 @@ class DangerZoneMapper:
                 "iou_threshold": iou_threshold,
                 "bounding_rect": cv2.boundingRect(points)
             }
-            
+
             # target_list가 주어지면 거기에 추가, 아니면 self.danger_zones에 추가
             if target_list is not None:
                 target_list.append(zone)
