@@ -1,25 +1,30 @@
-from google.cloud.firestore_v1.client import Client
+from typing import List, Dict, Any, Optional, Callable
 from loguru import logger
-from typing import List, Dict, Any, Optional
+from google.cloud.firestore import Client, DocumentSnapshot, Query
+from google.api_core.exceptions import GoogleAPICallError
+
+from server.db_connector import get_db_client # 수정된 임포트
+from core.models import Zone, ZoneUpdate
 
 class ZoneService:
-    """
-    Firestore 'danger_zones' 컬렉션과 상호작용하여
-    위험 구역 데이터를 관리하는 서비스 클래스.
-    """
-    def __init__(self, db: Client, collection_name: str = 'danger_zones'):
-        """
-        ZoneService를 초기화합니다.
+    """위험 구역(Danger Zone)의 Firestore CRUD 및 실시간 감시를 담당합니다."""
 
-        Args:
-            db (Client): 이미 초기화된 Firestore 클라이언트 객체.
-            collection_name (str): 사용할 Firestore 컬렉션 이름.
+    def __init__(self):
         """
-        if not isinstance(db, Client):
-            raise TypeError("db must be an instance of google.cloud.firestore_v1.client.Client")
-        self.db = db
-        self.collection_ref = self.db.collection(collection_name)
-        logger.success(f"ZoneService initialized for collection '{collection_name}'.")
+        ZoneService 초기화. DB 클라이언트를 지연 초기화합니다.
+        """
+        self._db: Optional[Client] = None
+        self.collection_name = "danger_zones"
+        self._listener: Optional[Callable] = None
+        self._watch = None
+        logger.success(f"ZoneService initialized for collection '{self.collection_name}' (DB client will connect on first use).")
+
+    @property
+    def db(self) -> Client:
+        """DB 클라이언트에 처음 접근할 때 지연 초기화를 수행합니다."""
+        if self._db is None:
+            self._db = get_db_client()
+        return self._db
 
     def get_all_zones(self) -> List[Dict[str, Any]]:
         """컬렉션의 모든 위험 구역 문서를 가져옵니다."""

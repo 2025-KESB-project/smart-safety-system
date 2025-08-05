@@ -1,34 +1,31 @@
 import asyncio
-from typing import Dict, Any
+from datetime import datetime, timezone
+from typing import Dict, Any, Optional
 from loguru import logger
-from datetime import datetime
-from firebase_admin import firestore
-from google.cloud.firestore_v1.client import Client
-from pydantic import ValidationError
+from google.cloud.firestore import Client
 
+from server.db_connector import get_db_client # 수정된 임포트
 from .websocket_service import WebSocketService
-from server.models.websockets import LogMessage # LogMessage 모델 임포트
 
 class DBService:
-    """
-    Firestore 데이터베이스 작업을 관리하고,
-    새로운 로그 발생 시 Pydantic 모델로 검증 후 WebSocketService에 방송을 위임합니다.
-    (비동기 방식으로 리팩토링됨)
-    """
+    """Firestore와 상호작용하여 이벤트 로그를 관리합니다."""
 
-    def __init__(self, db: Client, loop: asyncio.AbstractEventLoop, websocket_service: WebSocketService):
+    def __init__(self, loop: Optional[asyncio.AbstractEventLoop] = None, websocket_service: Optional[WebSocketService] = None):
         """
-        DBService를 초기화합니다.
+        DBService 초기화. DB 클라이언트를 지연 초기화합니다.
         """
-        if not isinstance(db, Client):
-            raise TypeError("db must be an instance of google.cloud.firestore_v1.client.Client")
-        
-        self.db = db
-        self.loop = loop
+        self._db: Optional[Client] = None
+        self.loop = loop or asyncio.get_event_loop()
         self.websocket_service = websocket_service
-        self.collection_name = 'event_logs'
-        
-        logger.success("DBService 초기화 완료 (WebSocket 방송 위임).")
+        self.collection_name = "event_logs"
+        logger.success("DBService 초기화 완료 (DB 클라이언트는 첫 사용 시 연결됩니다).")
+
+    @property
+    def db(self) -> Client:
+        """DB 클라이언트에 처음 접근할 때 지연 초기화를 수행합니다."""
+        if self._db is None:
+            self._db = get_db_client()
+        return self._db
 
     def get_status(self) -> dict:
         """Firestore 클라이언트의 상태를 확인합니다."""
@@ -51,12 +48,13 @@ class DBService:
             validated_data = log_message.model_dump()
             logger.success(f"로그 데이터 검증 성공: {log_message.event_type}")
 
-            # 2. DB에 데이터 저장 (동기 I/O 작업을 이벤트 루프를 막지 않도록 처리)
-            def db_write():
+            # 2. 동기 I/O인 DB 쓰기 작업을 별도 스레드에서 실행
+            def db_write_sync():
                 try:
                     event_data_for_db = validated_data.copy()
                     event_data_for_db['timestamp'] = firestore.SERVER_TIMESTAMP
                     collection_ref = self.db.collection(self.collection_name)
+                    # 이 함수는 동기 함수이며, 튜플을 반환합니다.
                     collection_ref.add(event_data_for_db)
                     logger.info(f"이벤트 로그 DB 저장 성공: {validated_data.get('event_type')}")
                     return True
@@ -64,7 +62,8 @@ class DBService:
                     logger.error(f"DB 쓰기 작업 중 오류 발생: {e}")
                     return False
 
-            db_success = await self.loop.run_in_executor(None, db_write)
+            # run_in_executor를 사용하여 동기 함수를 이벤트 루프 밖에서 실행
+            db_success = await self.loop.run_in_executor(None, db_write_sync)
 
             # 3. DB 저장이 성공했을 때만 WebSocketService에 방송 위임
             if db_success:

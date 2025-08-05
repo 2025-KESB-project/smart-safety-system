@@ -1,5 +1,5 @@
-import React, { useRef, useEffect } from 'react';
-import './Dashboard.css';  
+import React, { useRef } from 'react';
+import '../../pages/Dashboard/Dashboard.css';  
 
 export default function LiveStreamContent({ onImageLoad }) {
   

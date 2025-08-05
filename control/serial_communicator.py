@@ -1,5 +1,6 @@
 import serial
 import time
+import asyncio
 from loguru import logger
 from typing import Optional
 
@@ -47,20 +48,35 @@ class SerialCommunicator:
             self.mock_mode = True
             self.serial = None
 
-    def send_command(self, command: str):
-        """아두이노에 명령어를 전송합니다."""
-        if self.mock_mode or not self.serial or not self.serial.is_open:
-            logger.info(f"[MOCK] 시리얼 명령어 전송: {command}")
-            return
+    async def send_command(self, command: str) -> str:
+        """아두이노에 비동기적으로 명령어를 전송하고 응답을 받습니다."""
+        if self.mock_mode:
+            logger.info(f"[MOCK] 시리얼 명령어: {command} -> 응답: OK")
+            return "OK"
+        
+        if not self.serial or not self.serial.is_open:
+            logger.error("시리얼 포트가 열려있지 않습니다.")
+            return "Error: Serial port not open."
+
+        def sync_io():
+            try:
+                full_command = f"{command}\n"
+                self.serial.write(full_command.encode('utf-8'))
+                logger.debug(f"시리얼 명령어 전송 ->: {command}")
+                
+                # 아두이노로부터 응답을 읽습니다.
+                response = self.serial.readline().decode('utf-8').strip()
+                logger.debug(f"응답 수신 <-: {response}")
+                return response
+            except serial.SerialException as e:
+                logger.error(f"시리얼 통신 중 에러 발생: {e}")
+                return f"Error: {e}"
 
         try:
-            full_command = f"{command}\n"
-            self.serial.write(full_command.encode('utf-8'))
-            logger.debug(f"시리얼 명령어 전송: {command}")
-            # time.sleep(0.05) # 응답을 기다릴 경우 필요
-        except serial.SerialException as e:
-            logger.error(f"명령어 전송 중 오류 발생: {e}")
-            self._initialize_serial() # 연결 재시도
+            return await asyncio.to_thread(sync_io)
+        except Exception as e:
+            logger.error(f"asyncio.to_thread 실행 중 에러: {e}")
+            return f"Error: {e}"
 
     def release(self):
         """시리얼 포트 연결을 해제합니다."""

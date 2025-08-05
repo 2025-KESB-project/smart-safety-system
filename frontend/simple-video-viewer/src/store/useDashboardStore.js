@@ -19,7 +19,62 @@ const useDashboardStore = create((set, get) => ({
   newZoneName: '',
   imageSize: null,
   
+  wsStatus: 'connecting',
+  currentTime: '',
+  
   // 2. 액션 (Actions)
+
+  initialize: async () => {
+    get().connect();
+    get().startTimer();
+    await get().fetchLogs(true);
+    await get().fetchZones();
+  },
+
+  connect: () => {
+    const socket = new WebSocket('ws://localhost:8000/ws/logs');
+
+    socket.onopen = () => {
+      set({ wsStatus: 'open' });
+    };
+
+    socket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message && message.event_type) {
+          get().addLog(message);
+        }
+      } catch (e) {
+        console.error("WebSocket 메시지 처리 오류:", e);
+      }
+    };
+
+    socket.onerror = (error) => {
+      console.error("❌ WebSocket 오류 발생:", error);
+      set({ wsStatus: 'error' });
+    };
+
+    socket.onclose = () => {
+      set({ wsStatus: 'closed' });
+    };
+  },
+
+  startTimer: () => {
+    setInterval(() => {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const date = String(now.getDate()).padStart(2, '0');
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const day = dayNames[now.getDay()];
+      let h = now.getHours();
+      const m = String(now.getMinutes()).padStart(2, '0');
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      if (h > 12) h -= 12;
+      if (h === 0) h = 12;
+      set({ currentTime: `${year}-${month}-${date} (${day}) / ${ampm}-${h}:${m}` });
+    }, 1000);
+  },
 
   /**
    * API에서 초기 로그 데이터를 가져옵니다.
@@ -29,9 +84,7 @@ const useDashboardStore = create((set, get) => ({
     if (showLoading) set({ loading: true });
     set({ error: null });
     try {
-      const res = await fetch('/api/logs?limit=50');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const data = await logAPI.getLogs();
       set({ logs: data });
     } catch (e) {
       console.error(e);
@@ -46,9 +99,7 @@ const useDashboardStore = create((set, get) => ({
    */
   fetchZones: async () => {
     try {
-      const res = await fetch('/api/zones/');
-      if (!res.ok) throw new Error(res.status);
-      const data = await res.json();
+      const data = await zoneAPI.getZones();
       set({ zones: data });
     } catch (e) {
       console.error('구역 조회 실패', e);
@@ -94,36 +145,30 @@ const useDashboardStore = create((set, get) => ({
    * 컨베이어 제어 명령을 서버에 전송합니다.
    * @param {'start_automatic' | 'start_maintenance' | 'stop'} controlType - 제어 종류
    */
-  handleControl: async (controlType) => {
+  handleControl: async (controlType, confirmed = false) => {
     set({ loading: true });
-    const url = `/api/control/${controlType}`;
-
     try {
-      const res = await fetch(url, { method: 'POST' });
+      let response;
+      if (controlType === 'start_automatic') {
+        response = await controlAPI.startAutomaticMode(confirmed);
+      } else if (controlType === 'start_maintenance') {
+        response = await controlAPI.startMaintenanceMode();
+      } else if (controlType === 'stop') {
+        response = await controlAPI.stopSystem();
+      }
 
-      // 202 Accepted: 2차 확인 필요
-      if (res.status === 202) {
-        const data = await res.json();
-        if (data.confirmation_required && window.confirm(data.message)) {
-          const confirmedUrl = new URL(url, window.location.origin);
-          confirmedUrl.searchParams.append('confirmed', 'true');
-          // 재귀적으로 자기 자신을 다시 호출
-          await get().handleControl(confirmedUrl.pathname + confirmedUrl.search);
+      if (response.confirmation_required) {
+        if (window.confirm(response.message)) {
+          await get().handleControl(controlType, true); // 재귀 호출 with confirmation
         }
-        return; // 2차 확인 흐름 종료
+        return; // 여기서 처리를 중단하고 사용자 확인을 기다립니다.
       }
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || `HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-      set({ operationMode: data.operation_mode });
-
+      set({ operationMode: response.operation_mode });
     } catch (e) {
       console.error(e);
-      get().setPopupError(e.message || '명령을 실행하는 중 오류가 발생했습니다.');
+      const errorDetail = e.response?.data?.detail || e.message;
+      get().setPopupError(`명령 실행 중 오류: ${errorDetail}`);
     } finally {
       set({ loading: false });
     }
@@ -213,19 +258,7 @@ const useDashboardStore = create((set, get) => ({
     }
   },
   
-  // --- 유틸리티 액션 ---
-  setPopupError: (message) => {
-    set({ popupError: message });
-    setTimeout(() => set({ popupError: null }), 5000);
-  },
-  fetchZones: async () => {
-    try {
-      const zones = await zoneAPI.getZones();
-      set({ zones });
-    } catch (e) {
-      console.error('구역 조회 실패', e);
-    }
-  },
+  
 }));
 
 export default useDashboardStore;

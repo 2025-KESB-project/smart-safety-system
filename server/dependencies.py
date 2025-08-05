@@ -4,7 +4,6 @@ from loguru import logger
 # 아키텍처 변경으로 인한 임포트 경로 수정
 from server.state_manager import SystemStateManager
 from control.control_facade import ControlFacade
-from detect.detect_facade import Detector
 from logic.logic_facade import LogicFacade
 from server.services.db_service import DBService
 from server.services.websocket_service import WebSocketService
@@ -17,8 +16,11 @@ def get_state_manager(request: Request) -> SystemStateManager:
     app.state에 저장된 공유 SystemStateManager 인스턴스를 가져옵니다.
     """
     if not hasattr(request.app.state, 'state_manager'):
-        logger.critical("SystemStateManager가 app.state에 초기화되지 않았습니다!")
-        raise RuntimeError("SystemStateManager is not initialized.")
+        # 지연 초기화 로직 추가
+        logger.warning("SystemStateManager가 app.state에 없습니다. 지연 초기화를 시도합니다.")
+        control_facade = get_control_facade(request)
+        request.app.state.state_manager = SystemStateManager(control_facade=control_facade)
+        logger.success("SystemStateManager 지연 초기화 완료.")
     return request.app.state.state_manager
 
 def get_control_facade(request: Request) -> ControlFacade:
