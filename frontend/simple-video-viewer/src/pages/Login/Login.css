@@ -209,3 +209,30 @@
   border-radius: 6px;
   cursor: pointer;
 }
+.intro-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  margin-top: 16px;
+  padding: 10px 18px;
+  background: linear-gradient(135deg, #000000 0%, #000000 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.intro-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+}
+
+.intro-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}

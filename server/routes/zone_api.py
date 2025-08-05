@@ -10,7 +10,7 @@ router = APIRouter(
     tags=["위험 구역 (Danger Zones)"]
 )
 
-@router.get("/", response_model=List[DangerZone], summary="모든 위험 구역 조회")
+@router.get("", response_model=List[DangerZone], summary="모든 위험 구역 조회")
 def get_all_zones(zone_service: ZoneService = Depends(get_zone_service)):
     """설정된 모든 위험 구역의 목록을 조회합니다."""
     try:
@@ -41,21 +41,21 @@ def get_zone_by_id(zone_id: str, zone_service: ZoneService = Depends(get_zone_se
         points=[Point(**p) for p in zone.get('points', [])]
     )
 
-@router.post("/", response_model=ZoneResponse, status_code=status.HTTP_201_CREATED, summary="새로운 위험 구역 생성")
+@router.post("", response_model=ZoneResponse, status_code=status.HTTP_201_CREATED, summary="새로운 위험 구역 생성")
 def create_zone(
-    zone_data: DangerZoneCreate,
-    zone_id: str = Body(..., alias="id", description="새 구역의 고유 ID"),
+    zone: DangerZone, # 프론트엔드에서 보낸 id, name, points를 포함한 단일 객체를 받음
     zone_service: ZoneService = Depends(get_zone_service)
 ):
     """새로운 위험 구역을 생성합니다. 요청 본문에 `id`, `name`, `points`를 포함해야 합니다."""
-    if zone_service.get_zone(zone_id):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"ID가 '{zone_id}'인 구역이 이미 존재합니다.")
+    if zone_service.get_zone(zone.id):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"ID가 '{zone.id}'인 구역이 이미 존재합니다.")
     
     # Pydantic 모델을 DB에 저장할 딕셔너리로 변환
-    zone_dict = zone_data.model_dump()
+    zone_dict = zone.model_dump()
     
-    zone_service.add_or_update_zone(zone_id, zone_dict)
-    return ZoneResponse(status="success", message=f"'{zone_id}' 구역이 성공적으로 생성되었습니다.", zone_id=zone_id)
+    # id는 경로 파라미터가 아닌 모델에서 직접 가져옴
+    zone_service.add_or_update_zone(zone.id, zone_dict)
+    return ZoneResponse(status="success", message=f"'{zone.id}' 구역이 성공적으로 생성되었습니다.", zone_id=zone.id)
 
 @router.put("/{zone_id}", response_model=ZoneResponse, summary="위험 구역 정보 업데이트")
 def update_zone(

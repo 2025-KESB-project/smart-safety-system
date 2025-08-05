@@ -68,12 +68,9 @@ def get_websocket_service(websocket: WebSocket) -> 'WebSocketService':
 
 def get_zone_service(request: Request) -> ZoneService:
     """
-    ZoneService 인스턴스를 생성하여 반환합니다.
-    ZoneService는 DB 클라이언트에 의존합니다.
+    app.state에 저장된 공유 ZoneService 인스턴스를 가져옵니다.
     """
-    if not hasattr(request.app.state, 'db'):
-        logger.critical("DB client가 app.state에 초기화되지 않았습니다!")
-        raise RuntimeError("DB client is not initialized.")
-    # ZoneService는 상태를 갖지 않으므로, 요청 시마다 생성해도 무방합니다.
-    # 또는 app.state에 등록된 단일 인스턴스를 사용할 수도 있습니다.
-    return ZoneService(db=request.app.state.db)
+    if not hasattr(request.app.state, 'zone_service'):
+        logger.critical("ZoneService가 app.state에 초기화되지 않았습니다!")
+        raise RuntimeError("ZoneService is not initialized.")
+    return request.app.state.zone_service

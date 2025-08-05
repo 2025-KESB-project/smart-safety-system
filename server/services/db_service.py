@@ -47,27 +47,31 @@ class DBService:
             if 'timestamp' not in event_data:
                 event_data['timestamp'] = datetime.now().isoformat()
 
-            try:
-                log_message = LogMessage(**event_data)
-                validated_data = log_message.model_dump()
-                logger.success(f"로그 데이터 검증 성공: {log_message.event_type}")
-            except ValidationError as e:
-                logger.error(f"웹소켓 로그 데이터 검증 실패: {e}")
-                return
+            log_message = LogMessage(**event_data)
+            validated_data = log_message.model_dump()
+            logger.success(f"로그 데이터 검증 성공: {log_message.event_type}")
 
             # 2. DB에 데이터 저장 (동기 I/O 작업을 이벤트 루프를 막지 않도록 처리)
             def db_write():
-                event_data_for_db = event_data.copy()
-                event_data_for_db['timestamp'] = firestore.SERVER_TIMESTAMP
-                collection_ref = self.db.collection(self.collection_name)
-                collection_ref.add(event_data_for_db)
-                logger.info(f"이벤트 로그 DB 저장 성공: {event_data.get('event_type')}")
+                try:
+                    event_data_for_db = validated_data.copy()
+                    event_data_for_db['timestamp'] = firestore.SERVER_TIMESTAMP
+                    collection_ref = self.db.collection(self.collection_name)
+                    collection_ref.add(event_data_for_db)
+                    logger.info(f"이벤트 로그 DB 저장 성공: {validated_data.get('event_type')}")
+                    return True
+                except Exception as e:
+                    logger.error(f"DB 쓰기 작업 중 오류 발생: {e}")
+                    return False
 
-            await self.loop.run_in_executor(None, db_write)
+            db_success = await self.loop.run_in_executor(None, db_write)
 
-            # 3. WebSocketService에 'logs' 채널로 방송 위임 (간단한 await 호출로 변경)
-            await self.websocket_service.broadcast_to_channel('logs', validated_data)
+            # 3. DB 저장이 성공했을 때만 WebSocketService에 방송 위임
+            if db_success:
+                await self.websocket_service.broadcast_to_channel('logs', validated_data)
             
+        except ValidationError as e:
+            logger.error(f"웹소켓 로그 데이터 검증 실패: {e}")
         except Exception as e:
             logger.error(f"이벤트 로그 저장 또는 방송 중 오류 발생: {e}")
 

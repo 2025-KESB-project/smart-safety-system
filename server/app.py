@@ -37,7 +37,7 @@ from server.routes import log_api, streaming, alert_ws, zone_api, control_api, l
 # 중앙 설정 (CONFIG)
 # --------------------------------------------------------------------------
 CONFIG = {
-    'input': {'camera_index': 3, 'mock_mode': False},
+    'input': {'camera_index': 0, 'mock_mode': False},
     'detector': {'person_detector': {'model_path': 'yolov8n.pt'}, 'pose_detector': {'pose_model_path': 'yolov8n-pose.pt'}},
     'control': {'mock_mode': False},
     'service': {'firebase_credential_path': str(Path(__file__).parent.parent / "config" / "firebase_credential.json")}
@@ -94,10 +94,10 @@ async def lifespan(app: FastAPI):
         # 나머지 서비스들을 생성합니다.
         app.state.websocket_service = WebSocketService()
         app.state.db_service = DBService(db=db_client, loop=app.state.loop, websocket_service=app.state.websocket_service)
-        zone_service = ZoneService(db=db_client)
+        app.state.zone_service = ZoneService(db=db_client)
         
         # 나머지 Facade들을 생성합니다.
-        app.state.detector = Detector(config=CONFIG.get('detector', {}), zone_service=zone_service)
+        app.state.detector = Detector(config=CONFIG.get('detector', {}), zone_service=app.state.zone_service)
         app.state.logic_facade = LogicFacade(config=CONFIG)
         
         logger.success("모든 서비스 및 로직 모듈 초기화 완료.")
@@ -129,7 +129,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost", "http://localhost:3000", "http://localhost:8080"],
+    allow_origins=["*"],  # 모든 출처에서의 연결을 허용
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
@@ -142,8 +142,8 @@ app.include_router(control_api.router, prefix="/api/control", tags=["System Cont
 app.include_router(log_api.router, prefix="/api/logs", tags=["Log Data"])
 app.include_router(zone_api.router, prefix="/api/zones", tags=["Danger Zones"])
 app.include_router(streaming.router, prefix="/api/streaming", tags=["Video Streaming"])
-app.include_router(alert_ws.router, prefix="/ws", tags=["WebSocket (Alerts)"])
-app.include_router(log_ws.router, prefix="/ws", tags=["WebSocket (Log Stream)"])
+app.include_router(alert_ws.router, prefix="/ws/alerts", tags=["WebSocket (Alerts)"])
+app.include_router(log_ws.router, prefix="/ws/logs", tags=["WebSocket (Log Stream)"])
 
 # --------------------------------------------------------------------------
 # 기본 및 상태 확인 라우트

@@ -97,27 +97,6 @@ class RuleEngine:
             actions.append(log_action)
             self.last_logged_state = current_state
 
-        # 2. 위험 상황에 대해 UI 알림 (중복 알림 방지 필요 시 추가 로직 구현)
-        if risk_factors:
-            # UI에 보낼 가장 중요한 알림 하나를 선택 (예: 넘어짐/센서 > 침입 > 웅크림)
-            level = "safe"
-            message = ""
-            if is_falling:
-                level, message = "critical", "넘어짐 감지! 즉시 정지합니다."
-            elif has_sensor_alert:
-                level, message = "critical", "비상 센서 감지! 즉시 정지합니다."
-            elif has_intrusion:
-                level, message = "high", "위험 구역 침입 감지!"
-            elif is_crouching:
-                level, message = "medium", "웅크린 자세 감지. 주의가 필요합니다."
-
-            if level != "safe":
-                notification_details = {
-                    "type": "SYSTEM_ALERT",
-                    "level": level,
-                    "message": message,
-                    "timestamp": datetime.now().isoformat()
-                }
-                actions.append({"type": "NOTIFY_UI", "details": notification_details})
+        
 
         return actions
