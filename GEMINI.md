@@ -152,3 +152,14 @@
 - **'빠른 실패(Fail-Fast)' 로직 도입**:
     - `input_adapter/input_facade.py`와 `input_adapter/sensor.py`의 `__init__` 메소드에 `mock_mode=False`임에도 `communicator`가 주입되지 않을 경우 명시적인 `ValueError`를 발생시키도록 로직 추가. 이는 조용한 실패를 방지하고 개발자가 초기화 문제를 즉시 인지하도록 유도.
     - 이로 인해 발생한 `InputAdapter` 초기화 오류를 `server/app.py`에서 `SerialCommunicator`를 올바르게 주입함으로써 해결.
+
+### 6. 주요 디버깅 및 해결 과정 (2025-08-05 업데이트)
+
+- **서버 시작 직후 멈춤 현상 (무한 로딩)**:
+    - **문제점**: 서버를 시작하면 모든 초기화 로그는 정상적으로 출력되지만, 웹사이트 접속 시 "Initializing Worker..." 화면에서 멈추거나 API 응답이 없어 무한 로딩 상태에 빠짐. `background_worker`의 `while` 루프가 전혀 실행되지 않음.
+    - **원인 분석**: `background_worker`가 `while` 루프에 진입하기 직전, `await db_service.log_event()`를 호출. `db_service`는 동기 I/O 작업인 Firestore 쓰기를 처리하기 위해 `loop.run_in_executor`를 사용. 하지만 `background_worker` 자체가 이미 별도의 작업 스레드에서 실행되고 있었기 때문에, **작업 스레드 안에서 또 다른 작업 스레드를 호출하고 기다리는 비동기 교착 상태(Deadlock)**가 발생하여 시스템 전체가 멈춤.
+    - **해결**: `server/services/db_service.py`의 `log_event` 함수에서, 불필요하고 오히려 교착 상태를 유발하는 `await self.loop.run_in_executor(None, db_write)` 구문을 제거하고, `db_write()` 함수를 직접 호출하도록 수정. 이를 통해 `background_worker`가 정상적으로 `while` 루프에 진입하도록 함.
+- **아두이노 자율 제어 기능 추가**:
+    - **목표**: PC의 제어와는 별개로, 아두이노가 PIR 센서 감지 시 자율적으로 릴레이를 차단하여 시스템의 반응성과 안정성을 극대화.
+    - **흐름**: PC의 역할이 '명령/제어'에서 '자율/보고'를 수용하는 '감독관'으로 변경되는 아키텍처 전환을 논의.
+    - **해결**: `arduino/safesystem-new/safesystem-new.ino` 파일의 `handle_sensors` 메서드를 수정하여, PIR 센서가 감지(`0`)되면 `digitalWrite(RELAY_PIN, LOW)`를 통해 즉시 전원을 차단하고, `{"type":"STATUS","source":"AUTO","power":"OFF"}`와 같은 JSON 메시지를 통해 PC에 그 사실을 보고하도록 구현.
