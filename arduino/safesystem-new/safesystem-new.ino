@@ -4,6 +4,9 @@ const int MOTOR_IN1 = 8;
 const int MOTOR_IN2 = 7;
 
 // 릴레이 모듈 제어 핀 (PowerController용)
+/*
+ * 릴레이 연결상태 NO, 전원과 릴레이의 상태가 동일
+ */
 const int RELAY_PIN = 10;
 
 // 피에조 부저 핀 (AlertController용)
@@ -28,7 +31,7 @@ void setup() {
 
   // 릴레이 핀 초기화
   pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, LOW); // 릴레이는 기본 OFF 상태
+  digitalWrite(RELAY_PIN, HIGH); // 릴레이는 기본 OFF 상태
 
   // 부저 핀 초기화
   pinMode(BUZZER_PIN, OUTPUT);
@@ -62,15 +65,15 @@ void handle_serial_commands() {
     // PowerController를 위한 전원 제어 명령어 (p0, p1)
     if (cmd.startsWith("p")) {
       int state = cmd.substring(1).toInt();
-      if (state == 1) {
-        digitalWrite(RELAY_PIN, HIGH); // 릴레이 ON
+      if (state == 0) {
+        digitalWrite(RELAY_PIN, LOW); // 릴레이 OFF
         digitalWrite(MOTOR_IN1, LOW);
         digitalWrite(MOTOR_IN2, LOW);
         analogWrite(MOTOR_ENA, 0); // 혹시 몰라서 모터도 OFF
-        Serial.println("Command: p1 -> Power ON (Relay HIGH) & Motor Stopped");
+        Serial.println("Command: p0 -> Power OFF (Relay LOW) & Motor Stopped");
       } else {
         digitalWrite(RELAY_PIN, LOW);  // 릴레이 OFF
-        Serial.println("Command: p0 -> Power OFF (Relay LOW)");
+        Serial.println("Command: p1 -> Power ON (Relay HIGH)");
       }
     }
     // SpeedController를 위한 모터 속도 제어 명령어 (s0 ~ s255)
@@ -107,7 +110,7 @@ void handle_serial_commands() {
 }
 
 /*
- * @brief 지정된 주파수로 3번 반복되는 경고음을 재생합니다.
+ * @brief 지정된 주파수로 9번 반복되는 경고음을 재생합니다.
  * @param note_frequency 재생할 음의 주파수 (Hz)
  */
 void play_alert_sound(int note_frequency) {
@@ -118,17 +121,25 @@ void play_alert_sound(int note_frequency) {
 }
 
 /*
- * @brief 모든 센서의 현재 상태를 읽고 처리합니다.
+ * @brief 모든 센서의 현재 상태를 읽고, 위험 시 자율적으로 반응합니다.
  */
 void handle_sensors() {
   // PIR 센서 상태 읽기
   pir_state = digitalRead(PIR_PIN);
 
-  // 상태 변화가 있을 때만 시리얼로 즉시 전송 (디버깅용)
+  // 상태가 "감지(0)"로 변경된 경우, 즉시 전원을 차단합니다.
+  if (pir_state == 0 && last_pir_state != 0) {
+    digitalWrite(RELAY_PIN, LOW);  // 릴레이 ON
+    digitalWrite(MOTOR_IN1, LOW);
+    digitalWrite(MOTOR_IN2, LOW);
+    analogWrite(MOTOR_ENA, 0);  // 혹시 몰라 모터도 정지
+    // 자율적으로 전원을 껐다고 PC에 보고합니다.
+    Serial.println("{\"type\":\"STATUS\",\"source\":\"AUTO\",\"power\":\"OFF\"}");
+  }
+
+  // 상태 변화가 있을 때만 PC로 센서 데이터를 전송합니다.
   if (pir_state != last_pir_state) {
-    // Serial.print("PIR state changed to: ");
-    // Serial.println(pir_state);
-    send_pir_data(); // 상태 변경 시 즉시 데이터 전송
+    send_pir_data();
     last_pir_state = pir_state;
   }
 }
