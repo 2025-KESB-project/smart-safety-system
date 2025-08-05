@@ -1,42 +1,29 @@
 from loguru import logger
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
-from control.serial_communicator import SerialCommunicator
-from control.alert_controller import AlertController
+from core.serial_communicator import SerialCommunicator
 from control.power_controller import PowerController
 from control.speed_controller import SpeedController
-from control.alert_controller import AlertController, AlertLevel # AlertLevel 임포트
-from server.services.websocket_service import WebSocketService
-from server.services.db_service import DBService
+from control.alert_controller import AlertController, AlertLevel
 
 class ControlFacade:
     """
     물리적 장치 제어를 위한 통합 인터페이스(Facade).
-    이제 SerialCommunicator의 생성과 생명주기를 책임집니다.
+    SerialCommunicator를 외부에서 주입받아 사용합니다.
     """
-    def __init__(self, mock_mode: bool = False, serial_port: str = None, baud_rate: int = 9600):
-        # Determine serial port if not provided
-        if serial_port is None:
-            serial_port = os.environ.get("SERIAL_PORT")
-            if not serial_port:
-                system = platform.system()
-                if system == "Darwin":  # macOS
-                    serial_port = "/dev/cu.usbserial-A5069RR4"
-                elif system == "Linux":
-                    serial_port = "/dev/ttyUSB0"
-                elif system == "Windows":
-                    serial_port = "COM1"
-                else:
-                    raise RuntimeError("Unsupported platform and no serial port specified.")
-        # 1. 시리얼 통신을 전담할 단일 인스턴스를 생성합니다.
-        self.communicator = SerialCommunicator(port=serial_port, baud_rate=baud_rate, mock_mode=mock_mode)
-        # 2. 생성된 communicator를 각 컨트롤러에 주입합니다.
-        self.speed_controller = SpeedController(communicator=self.communicator, mock_mode=self.communicator.mock_mode)
-        self.power_controller = PowerController(communicator=self.communicator, mock_mode=self.communicator.mock_mode)
-        self.alert_controller = AlertController(communicator=self.communicator, mock_mode=self.communicator.mock_mode)
+    def __init__(self, communicator: Optional[SerialCommunicator] = None, mock_mode: bool = False):
+        self.mock_mode = mock_mode
+        self.communicator = communicator
 
-        # 최종 하드웨어 연결 상태를 요약하여 로깅합니다.
-        if not self.communicator.mock_mode:
+        if not self.mock_mode and self.communicator is None:
+            raise ValueError("ControlFacade requires a SerialCommunicator in non-mock mode.")
+
+        # 주입된 communicator를 각 컨트롤러에 전달합니다.
+        self.speed_controller = SpeedController(communicator=self.communicator, mock_mode=self.mock_mode)
+        self.power_controller = PowerController(communicator=self.communicator, mock_mode=self.mock_mode)
+        self.alert_controller = AlertController(communicator=self.communicator, mock_mode=self.mock_mode)
+
+        if not self.mock_mode:
             logger.success("하드웨어 제어 모드가 활성화되었습니다 (모의 모드 OFF).")
         else:
             logger.warning("하드웨어 제어가 비활성화되었습니다 (모의 모드 ON).")

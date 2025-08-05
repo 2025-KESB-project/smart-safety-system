@@ -3,8 +3,8 @@ from .preprocess import VideoPreprocessor
 from .sensor import SensorReader
 from typing import Optional
 from loguru import logger
-
 from core.serial_communicator import SerialCommunicator
+import numpy as np
 
 class InputAdapter:
     def __init__(self, 
@@ -37,33 +37,26 @@ class InputAdapter:
             mock_mode=self.mock_mode
         )
 
-    def get_input(self):
-        """카메라 프레임과 센서 데이터를 함께 가져와서 반환합니다."""
-        # 1. 센서 데이터는 항상 읽어옵니다.
-        sensor_data = self.sensor.read()
-        raw_frame = None
-        preprocessed_frame = None
+    def get_sensor_data(self) -> dict:
+        """센서 데이터만 읽어서 반환합니다. (빠른 작업)"""
+        return self.sensor.read()
 
-        # 2. 모의 모드일 경우, 더미 프레임을 생성합니다.
+    def get_frame(self) -> Optional[np.ndarray]:
+        """카메라 프레임만 읽어서 반환합니다. (잠재적 블로킹 작업)"""
         if self.mock_mode:
-            import numpy as np
-            raw_frame = np.zeros((480, 640, 3), dtype=np.uint8)
-            preprocessed_frame = self.preprocessor.process_frame(raw_frame)
-        # 3. 실제 카메라 스트림이 활성화된 경우에만 프레임을 가져옵니다.
-        elif self.stream is not None:
-            raw_frame = self.stream.get_frame()
-            if raw_frame is not None:
-                preprocessed_frame = self.preprocessor.process_frame(raw_frame)
-            else:
-                logger.warning("InputAdapter: 스트림에서 유효한 프레임을 얻지 못했습니다.")
+            return np.zeros((480, 640, 3), dtype=np.uint8)
         
-        # 최종적으로 수집된 데이터를 반환합니다.
-        # raw_frame이 None일 수도 있지만, sensor_data는 항상 존재합니다.
-        return {
-            'frame': preprocessed_frame,
-            'raw_frame': raw_frame,
-            'sensor_data': sensor_data
-        }
+        if self.stream:
+            return self.stream.get_frame()
+        return None
+
+    def get_preprocessed_frame(self, frame: np.ndarray) -> np.ndarray:
+        """주어진 프레임을 전처리하여 반환합니다."""
+        return self.preprocessor.process_frame(frame)
+
+    def get_status_events(self) -> list:
+        """SensorReader로부터 아두이노의 자율 제어 상태 이벤트를 가져옵니다."""
+        return self.sensor.get_status_events()
 
     def release(self):
         if self.stream is not None:

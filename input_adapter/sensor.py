@@ -15,17 +15,13 @@ except ImportError:
 
 class SensorReader:
     """
-    아두이노 또는 모의 데이터를 통해 센서 데이터를 읽는 지능형 클래스.
-    이제 SerialCommunicator를 주입받아 시리얼 통신을 처리합니다.
+    아두이노의 자율 제어 보고를 수신하고, 센서 데이터를 읽는 리스너 클래스.
     """
-    STALE_THRESHOLD_SECONDS = 1.5
-
     def __init__(self, 
                  communicator: Optional[SerialCommunicator] = None, 
                  mock_mode: bool = True,
                  max_buffer_size: int = 100):
         
-        # Fail-Fast: 실제 모드(mock_mode=False)에서는 communicator가 필수입니다.
         if not mock_mode and communicator is None:
             raise ValueError("SensorReader는 실제 모드에서 SerialCommunicator 객체가 반드시 필요합니다.")
 
@@ -36,10 +32,14 @@ class SensorReader:
         self.is_running = False
         self.max_buffer_size = max_buffer_size
 
+        # 센서의 최신 상태 저장
         self.latest_states: Dict[str, Dict[str, Any]] = {
             "PIR": {"value": 1, "timestamp": 0},
             "ULTRASONIC": {"value": -1, "timestamp": 0}
         }
+        # 아두이노의 자율 제어 이벤트를 저장하는 큐
+        self.status_event_queue: deque = deque(maxlen=50)
+        
         self.data_buffer: deque = deque(maxlen=self.max_buffer_size)
         self.thresholds = {
             "PIR": 0,
@@ -54,7 +54,7 @@ class SensorReader:
         self.start()
 
     def _background_worker(self):
-        """백그라운드에서 데이터를 지속적으로 읽고 상태와 버퍼를 업데이트합니다."""
+        """백그라운드에서 아두이노 데이터를 지속적으로 읽고 상태와 이벤트를 업데이트합니다."""
         while self.is_running:
             if self.mock_mode or self.communicator is None:
                 self._update_mock_states()
@@ -63,78 +63,64 @@ class SensorReader:
 
             line = self.communicator.read_line()
             if not line:
-                time.sleep(0.01) # 데이터가 없을 경우 CPU 사용량 방지를 위해 짧은 대기
+                time.sleep(0.01)
                 continue
 
             if line.startswith("{") and line.endswith("}"):
                 try:
-                    sensor_data = json.loads(line)
-                    self._process_received_data(sensor_data)
+                    data = json.loads(line)
+                    self._process_received_data(data)
                 except json.JSONDecodeError:
                     logger.warning(f"[Sensor] JSON 파싱 실패. 원본 데이터: {line}")
             else:
                 logger.debug(f"[Sensor] JSON 형식이 아닌 데이터 수신: {line}")
 
-    def _process_received_data(self, sensor_data: Dict[str, Any]):
-        """수신된 데이터를 처리하여 latest_states와 data_buffer를 모두 업데이트합니다."""
-        sensor_type = sensor_data.get("type")
-        value = sensor_data.get("value")
+    def _process_received_data(self, data: Dict[str, Any]):
+        """수신된 데이터를 종류에 따라 처리합니다 (센서 상태 or 자율 제어 이벤트)."""
+        data_type = data.get("type")
         
-        # 유효한 센서 타입인지 확인
-        if not (sensor_type and value is not None and sensor_type in self.latest_states):
-            return
-
-        now = time.time()
         with self.lock:
-            # 1. 최신 상태 업데이트
-            self.latest_states[sensor_type] = {"value": value, "timestamp": now}
-            
-            # 2. 데이터 버퍼에 추가 (read()와 동일한 형식으로)
-            # read()를 호출하여 현재의 완전한 센서 상태를 가져와 버퍼에 저장
-            self.data_buffer.append(self.read())
+            if data_type in self.latest_states:
+                # Case 1: 일반 센서 데이터 (PIR, ULTRASONIC)
+                value = data.get("value")
+                if value is not None:
+                    now = time.time()
+                    self.latest_states[data_type] = {"value": value, "timestamp": now}
+                    # 데이터 버퍼에도 최신 상태 기록 (기존 로직 유지)
+                    self.data_buffer.append(self.read())
+
+            elif data_type == "STATUS":
+                # Case 2: 아두이노의 자율 제어 상태 보고
+                logger.info(f"Arduino 자율 제어 이벤트 수신: {data}")
+                self.status_event_queue.append(data)
 
     def _update_mock_states(self):
         """모의 모드용 상태 및 버퍼 업데이트 함수"""
         now = time.time()
         with self.lock:
-            # PIR 모의 데이터: 0 (감지) 또는 1 (미감지)
             self.latest_states["PIR"] = {"value": random.choice([0, 1]), "timestamp": now}
-            # ULTRASONIC 모의 데이터: 3cm ~ 100cm
             self.latest_states["ULTRASONIC"] = {"value": random.randint(3, 100), "timestamp": now}
-            
-            # 데이터 버퍼에 추가
             self.data_buffer.append(self.read())
 
     def read(self) -> Dict[str, Any]:
         """
-        '신선도'가 보장된 최신 센서 데이터를 반환합니다.
+        최신 센서 데이터를 반환합니다. '신선도' 체크 로직은 제거되었습니다.
         """
         with self.lock:
-            # 현재 상태를 안전하게 복사
-            fresh_states = {s_type: data.copy() for s_type, data in self.latest_states.items()}
+            current_states = {s_type: data.copy() for s_type, data in self.latest_states.items()}
 
         now = time.time()
         output_sensors = {}
 
-        for sensor_type, state in fresh_states.items():
-            is_stale = (now - state["timestamp"]) > self.STALE_THRESHOLD_SECONDS
+        for sensor_type, state in current_states.items():
             value = state["value"]
             threshold = self.thresholds.get(sensor_type)
-
-
-            if is_stale:
-                # 데이터가 오래되었으면 센서 타입에 따라 기본/안전 값으로 되돌림
-                if sensor_type == "PIR":
-                    value = 1 # PIR은 미감지(1)가 안전한 기본값
-                elif sensor_type == "ULTRASONIC":
-                    value = -1 # 초음파는 비정상(-1)이 안전한 기본값
             
-            # is_alert 계산 로직
             is_alert = False
             if sensor_type == "PIR":
-                is_alert = (value == 0) # PIR은 0일 때 감지 (alert)
+                is_alert = (value == 0)
             elif sensor_type == "ULTRASONIC":
-                is_alert = (0 < value < threshold) # 초음파는 0보다 크고 임계값 미만일 때 경고
+                is_alert = (0 < value < threshold)
 
             output_sensors[sensor_type] = {
                 "value": value,
@@ -147,6 +133,13 @@ class SensorReader:
             "timestamp": now,
             "sensors": output_sensors
         }
+
+    def get_status_events(self) -> List[Dict[str, Any]]:
+        """큐에 쌓인 아두이노의 자율 제어 상태 이벤트를 모두 가져오고 큐를 비웁니다."""
+        with self.lock:
+            events = list(self.status_event_queue)
+            self.status_event_queue.clear()
+        return events
 
     def start(self):
         """백그라운드 모니터링 스레드를 시작합니다."""
