@@ -142,8 +142,8 @@ app.include_router(control_api.router, prefix="/api/control", tags=["System Cont
 app.include_router(log_api.router, prefix="/api/logs", tags=["Log Data"])
 app.include_router(zone_api.router, prefix="/api/zones", tags=["Danger Zones"])
 app.include_router(streaming.router, prefix="/api/streaming", tags=["Video Streaming"])
-app.include_router(alert_ws.router, prefix="/ws/alerts", tags=["WebSocket (Alerts)"])
-app.include_router(log_ws.router, prefix="/ws/logs", tags=["WebSocket (Log Stream)"])
+app.include_router(alert_ws.router, prefix="/ws", tags=["WebSocket (Alerts)"])
+app.include_router(log_ws.router, prefix="/ws", tags=["WebSocket (Log Stream)"])
 
 # --------------------------------------------------------------------------
 # 기본 및 상태 확인 라우트

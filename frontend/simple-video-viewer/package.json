@@ -2,6 +2,7 @@
   "name": "simple-video-viewer",
   "version": "0.1.0",
   "private": true,
+  "proxy": "http://localhost:8000",
   "dependencies": {
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
@@ -13,7 +14,8 @@
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.7.1",
     "react-scripts": "5.0.1",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^2.1.4",
+    "zustand": "^5.0.7"
   },
   "scripts": {
     "start": "react-scripts start",
