@@ -10,6 +10,8 @@ from loguru import logger
 import firebase_admin
 from firebase_admin import credentials, firestore
 
+from input_adapter.input_facade import InputAdapter
+
 # --------------------------------------------------------------------------
 # 시스템 경로 및 로깅 설정
 # --------------------------------------------------------------------------
@@ -37,7 +39,7 @@ from server.routes import log_api, streaming, alert_ws, zone_api, control_api, l
 # 중앙 설정 (CONFIG)
 # --------------------------------------------------------------------------
 CONFIG = {
-    'input': {'camera_index': 0, 'mock_mode': False},
+    'input': {'camera_index': 3, 'mock_mode': False},
     'detector': {'person_detector': {'model_path': 'yolov8n.pt'}, 'pose_detector': {'pose_model_path': 'yolov8n-pose.pt'}},
     'control': {'mock_mode': False},
     'service': {'firebase_credential_path': str(Path(__file__).parent.parent / "config" / "firebase_credential.json")}
@@ -67,6 +69,7 @@ async def lifespan(app: FastAPI):
     
     app.state.detector = Detector(config=CONFIG.get('detector', {}), zone_service=app.state.zone_service)
     app.state.logic_facade = LogicFacade(config=CONFIG)
+    app.state.input_adapter = InputAdapter(camera_index=0, mock_mode=False)
     
     logger.success("모든 서비스 및 로직 모듈 초기화 완료 (DB 연결은 지연됩니다).")
 
@@ -79,7 +82,7 @@ async def lifespan(app: FastAPI):
     
     # --- 서버 종료 ---
     logger.info("FastAPI 서버가 종료됩니다...")
-    if 'worker_task' in app.state and not app.state.worker_task.done():
+    if hasattr(app.state, 'worker_task') and app.state.worker_task and not app.state.worker_task.done():
         logger.info("백그라운드 워커 태스크를 취소합니다.")
         app.state.worker_task.cancel()
 

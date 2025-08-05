@@ -4,7 +4,7 @@ from google.cloud.firestore import Client, DocumentSnapshot, Query
 from google.api_core.exceptions import GoogleAPICallError
 
 from server.db_connector import get_db_client # 수정된 임포트
-from core.models import Zone, ZoneUpdate
+# from core.models import Zone, ZoneUpdate
 
 class ZoneService:
     """위험 구역(Danger Zone)의 Firestore CRUD 및 실시간 감시를 담당합니다."""
@@ -25,6 +25,11 @@ class ZoneService:
         if self._db is None:
             self._db = get_db_client()
         return self._db
+
+    @property
+    def collection_ref(self):
+        """컬렉션 참조에 처음 접근할 때 초기화를 수행합니다."""
+        return self.db.collection(self.collection_name)
 
     def get_all_zones(self) -> List[Dict[str, Any]]:
         """컬렉션의 모든 위험 구역 문서를 가져옵니다."""

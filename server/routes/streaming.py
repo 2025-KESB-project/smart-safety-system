@@ -20,7 +20,7 @@ def create_placeholder_image(text: str):
         cv2.putText(img, line, (50, y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
     return img
 
-def generate_frames(request: Request):
+def generate_frames(latest_frame_provider):
     """
     처리된 최신 프레임을 지속적으로 반환하는 제너레이터 함수.
     프레임을 사용할 수 없는 경우, 대체 이미지를 전송합니다.
@@ -28,7 +28,7 @@ def generate_frames(request: Request):
     last_frame_time = time.time()
     
     while True:
-        frame = request.app.state.latest_frame
+        frame = latest_frame_provider()
         
         if frame is None:
             # 5초 이상 프레임이 없으면 경고 메시지 표시
@@ -64,7 +64,10 @@ def video_feed(request: Request):
     실시간으로 처리되는 영상 스트림을 MJPEG 형식으로 제공합니다.
     HTML의 <img> 태그 src 속성에 이 엔드포인트를 직접 사용할 수 있습니다.
     """
-    return StreamingResponse(generate_frames(request), media_type="multipart/x-mixed-replace; boundary=frame")
+    def get_frame():
+        return getattr(request.app.state, 'latest_frame', None)
+    
+    return StreamingResponse(generate_frames(get_frame), media_type="multipart/x-mixed-replace; boundary=frame")
 
 
 

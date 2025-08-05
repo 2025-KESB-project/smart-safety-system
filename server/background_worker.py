@@ -2,12 +2,9 @@ import asyncio
 import cv2
 import time
 import sys
-import os
 from pathlib import Path
 from loguru import logger
 from fastapi import FastAPI
-import firebase_admin
-from firebase_admin import credentials, firestore
 
 # --------------------------------------------------------------------------
 # 시스템 경로 설정 및 모듈 임포트
@@ -15,13 +12,15 @@ from firebase_admin import credentials, firestore
 sys.path.append(str(Path(__file__).parent.parent))
 
 from input_adapter.input_facade import InputAdapter
-from server.services.db_service import DBService
 
-# 스트리밍을 위한 최신 프레임은 app.state를 통해 관리합니다.
-# 전역 변수는 제거되었습니다.
-def get_latest_frame(app: FastAPI):
-    """UI 스트리밍을 위해 app.state에서 최신 프레임을 반환합니다."""
-    return getattr(app.state, 'latest_frame', None)
+# 전역 변수 및 상태 제어 함수는 모두 제거되었습니다.
+# 스트리밍을 위한 최신 프레임은 app.state를 통해 관리하는 것이 더 안전하지만,
+# 여기서는 단순성을 위해 임시로 전역 변수를 유지합니다.
+latest_frame = None
+
+def get_latest_frame():
+    """UI 스트리밍을 위해 최신 프레임을 반환합니다."""
+    return latest_frame
 
 # --------------------------------------------------------------------------
 # 핵심 안전 시스템 워커 함수
@@ -32,67 +31,71 @@ async def run_safety_system(app: FastAPI):
     FastAPI의 lifespan에서 비동기 태스크로 실행됩니다.
     `state_manager.is_active()` 상태에 따라 로직 수행 여부를 결정합니다.
     """
-    app.state.latest_frame = None
+    global latest_frame
     logger.info("비동기 안전 시스템 워커를 시작합니다...")
 
+    # app.state에서 중앙 관리 객체들을 가져옵니다.
     try:
-        # 1. app.state에서 필요한 서비스들을 가져옵니다.
         state_manager = app.state.state_manager
         logic_facade = app.state.logic_facade
         control_facade = app.state.control_facade
         detector = app.state.detector
-        db_service = app.state.db_service # app.py에서 초기화된 DB 서비스 사용
-        loop = app.state.loop # 이벤트 루프 가져오기
-
+        db_service = app.state.db_service
+        websocket_service = app.state.websocket_service
+        loop = app.state.loop
     except AttributeError as e:
         logger.critical(f"app.state에서 객체를 가져오는 데 실패했습니다: {e}. Lifespan 초기화가 실패했을 수 있습니다.")
         return
 
-    # 2. InputAdapter 초기화 (카메라/센서)
-    try:
-        logger.info("InputAdapter 초기화를 시작합니다...")
-        input_adapter = InputAdapter(camera_index=3, mock_mode=False)
-        logger.success("InputAdapter 초기화 완료.")
-    except Exception as e:
-        logger.error(f"InputAdapter 초기화 중 심각한 오류 발생: {e}", exc_info=True)
-        return
+    # lifespan에서 생성된 InputAdapter 인스턴스를 사용합니다.
+    input_adapter = app.state.input_adapter
 
     # 최초 실행 시 컨베이어 전원을 끄고 시스템 상태를 기록합니다.
     logger.info("안전 초기화: 컨베이어 전원을 OFF 상태로 시작합니다.")
-    await control_facade.execute_actions([{"type": "POWER_OFF"}])
+    await control_facade.execute_actions([{"type": "POWER_OFF", "details": {"reason": "Worker initialization"}}])
     await db_service.log_event({
         "event_type": "LOG_SYSTEM_INITIALIZED", 
-        "details": {"message": "System worker started, conveyor forced OFF."}
+        "details": {"message": "System worker started, conveyor forced OFF."},
+        "log_level": "SUCCESS"
     })
 
     while True:
         try:
-            # 1. 영상 프레임 및 센서 데이터 획득 (항상 실행)
-            logger.debug("영상 프레임 및 센서 데이터 획득 시도...")
-            input_data = input_adapter.get_input()
-            if input_data is None or input_data.get('raw_frame') is None:
+            # # 1. (신규) 아두이노의 자율 제어 이벤트 확인 및 처리
+            # status_events = input_adapter.get_status_events()
+            # for event in status_events:
+            #     if event.get("source") == "AUTO" and event.get("power") == "OFF":
+            #         logger.warning(f"Arduino 자율 전원 차단 감지! 시스템을 즉시 중지합니다. 이벤트: {event}")
+            #         state_manager.stop_system_globally()
+            #         await db_service.log_event({
+            #             "event_type": "LOG_SYSTEM_FORCED_STOP",
+            #             "details": {"message": "Arduino autonomous power OFF detected.", "event": event},
+            #             "log_risk_level": "CRITICAL"
+            #         })
+
+            # 2. 영상 프레임 획득
+            raw_frame = input_adapter.get_frame()
+            if raw_frame is None:
                 logger.warning("입력 스트림으로부터 프레임을 가져올 수 없습니다. 1초 후 재시도...")
                 await asyncio.sleep(1)
                 continue
             
-            logger.debug("영상 프레임 획득 성공.")
-            raw_frame = input_data['raw_frame']
             display_frame = raw_frame.copy()
 
-            # 2. 시스템 활성화 상태일 때만 안전 로직 및 시각화 수행
+            # 3. 시스템 활성화 상태일 때만 안전 로직 및 시각화 수행
             if state_manager.is_active():
-                logger.debug("시스템 활성화 상태. 안전 로직 수행...")
-                # ... (이하 로직은 동일) ...
+                # 센서 데이터는 필요할 때만 별도로 획득
+                sensor_data = input_adapter.get_sensor_data()
                 current_status = state_manager.get_status()
                 current_mode = current_status.get("operation_mode")
                 conveyor_is_on = current_status.get("conveyor_is_on", False)
                 conveyor_speed = current_status.get("conveyor_speed", 100)
-                sensor_data = input_data['sensor_data']
 
-                # CPU를 많이 사용하는 모델 추론 작업을 별도의 스레드에서 실행하여 이벤트 루프 블로킹 방지
-                detection_result = await loop.run_in_executor(None, detector.detect, raw_frame)
+                # 객체 탐지
+                detection_result = detector.detect(raw_frame)
                 app.state.latest_detection_result = detection_result
 
+                # 로직 처리 (두뇌에게 판단 요청)
                 actions = logic_facade.process(
                     detection_result=detection_result,
                     sensor_data=sensor_data,
@@ -101,6 +104,7 @@ async def run_safety_system(app: FastAPI):
                     current_conveyor_speed=conveyor_speed
                 )
 
+                # 액션 실행 (조정자가 실행 분배)
                 control_actions = []
                 for action in actions:
                     action_type = action.get("type")
@@ -109,8 +113,12 @@ async def run_safety_system(app: FastAPI):
                     
                     elif action_type and action_type.startswith('LOG_'):
                         risk_factors = logic_facade.last_risk_analysis.get("risk_factors", [])
-                        log_risk_level = "INFO"
+
+                        # 로그 레벨과 설명을 결정
+                        log_risk_level = "INFO"  # 기본값
                         description = "System is operating normally."
+
+                        # 가장 중요한 위험 사실 하나를 찾아 설명과 레벨을 설정
                         if any(f["type"] == "POSTURE_FALLING" for f in risk_factors):
                             log_risk_level = "CRITICAL"
                             description = "A person falling has been detected."
@@ -130,30 +138,37 @@ async def run_safety_system(app: FastAPI):
                         event_data = {
                             "event_type": action_type,
                             "details": {"description": description},
-                            "risk_level": log_risk_level
+                            "log_risk_level": log_risk_level
                         }
                         await db_service.log_event(event_data)
                     
-                    
+                    elif action_type == 'NOTIFY_UI':
+                        asyncio.run_coroutine_threadsafe(
+                            websocket_service.broadcast_to_channel('alerts', action.get("details", {})),
+                            loop
+                        )
 
                 if control_actions:
                     await control_facade.execute_actions(control_actions)
 
+                # 시각화 및 스트리밍 프레임 업데이트
                 display_frame = detector.draw_detections(raw_frame, detection_result)
                 
+                # 최종 상태를 다시 가져와서 화면에 표시
                 final_status = state_manager.get_status()
                 mode_text = f"Mode: {final_status.get('operation_mode', 'N/A')}"
-                
+
+                # 속도와 전원 상태를 조합하여 더 상세한 상태 텍스트 생성
                 is_on = final_status.get('conveyor_is_on', False)
                 speed = final_status.get('conveyor_speed', 100)
-                
+
                 if not is_on:
                     status_text = "Status: STOPPED"
                 elif speed < 100:
                     status_text = f"Status: SLOWDOWN ({speed}%)"
                 else:
                     status_text = "Status: RUNNING"
-                
+
                 risk_factors = logic_facade.last_risk_analysis.get("risk_factors", [])
                 risk_text = "Risk: DETECTED" if risk_factors else "Risk: SAFE"
                 risk_color = (0, 0, 255) if risk_factors else (0, 255, 0)
@@ -163,11 +178,13 @@ async def run_safety_system(app: FastAPI):
                 cv2.putText(display_frame, risk_text, (15, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, risk_color, 2)
             
             else:
-                logger.debug("시스템 비활성화 상태. 안전 로직 건너뜀.")
+                # 시스템이 비활성화 상태일 때 대기하며 화면에 상태 표시
                 cv2.putText(display_frame, "SYSTEM INACTIVE", (15, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
                 await asyncio.sleep(0.5)
 
+            # 3. 최신 프레임을 app.state와 전역 변수에 업데이트 (항상 실행)
             app.state.latest_frame = display_frame.copy()
+            latest_frame = display_frame.copy()
             await asyncio.sleep(0.01)
 
         except Exception as e:

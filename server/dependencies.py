@@ -8,6 +8,7 @@ from logic.logic_facade import LogicFacade
 from server.services.db_service import DBService
 from server.services.websocket_service import WebSocketService
 from server.services.zone_service import ZoneService
+from detect.detect_facade import Detector
 
 # --- 중앙 관리 객체 의존성 ---
 

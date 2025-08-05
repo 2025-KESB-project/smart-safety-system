@@ -27,10 +27,13 @@ class SystemStateManager:
         logger.info("상태 관리자: '정비 모드(MAINTENANCE)'로 전환.")
 
     def stop_system_globally(self):
-        """모든 작업을 중지하고 시스템을 비활성화합니다."""
+        """모든 작업을 중지하고 시스템을 비활성화하며, 하드웨어 전원을 차단합니다."""
         self.system_is_active = False
         self.operation_mode = None
         logger.info("상태 관리자: 시스템 전체 중지됨.")
+        
+        # ControlFacade를 통해 물리적 전원 차단 명령 실행
+        self.control_facade.execute_actions([{"type": "POWER_OFF", "details": {"reason": "Global system stop API call"}}])
 
     def get_status(self) -> Dict[str, Any]:
         """시스템의 논리적 상태와 물리적 상태를 종합하여 반환합니다."""
