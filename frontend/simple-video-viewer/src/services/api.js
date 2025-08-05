@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const apiClient = axios.create({
-  baseURL: '', // baseURL을 비워 둡니다.
+  baseURL: '/api', // package.json의 "proxy" 설정과 연동
   headers: {
     'Content-Type': 'application/json',
   },
@@ -17,7 +17,7 @@ export const logAPI = {
    */
   getLogs: async () => {
     try {
-      const response = await apiClient.get('/api/logs'); // 전체 경로 사용
+      const response = await apiClient.get('/logs');
       return response.data;
     } catch (error) {
       console.error('Error fetching logs:', error);
@@ -36,7 +36,7 @@ export const zoneAPI = {
    */
   getZones: async () => {
     try {
-      const response = await apiClient.get('/api/zones'); // 전체 경로 사용
+      const response = await apiClient.get('/zones');
       return response.data;
     } catch (error) {
       console.error('Error fetching zones:', error);
@@ -44,18 +44,16 @@ export const zoneAPI = {
     }
   },
   /**
-   * 새로운 위험 구역을 생성합니다.
-   * @param {Object} zoneData - 생성할 위험 구역 데이터 ({ id, name, points })
+   * 새로운 위험 구역을 저장합니다.
+   * @param {Array<Object>} zones - 저장할 위험 구역 데이터
    * @returns {Promise<Object>} 성공 메시지
    */
-  createZone: async (zoneData) => {
+  saveZones: async (zones) => {
     try {
-      // 백엔드의 create_zone 함수는 요청 본문에서 id와 zone_data를 모두 요구합니다.
-      // FastAPI의 Body(alias="id") 기능 덕분에, 프론트에서는 id를 포함한 단일 객체로 보낼 수 있습니다.
-      const response = await apiClient.post('/api/zones', zoneData);
+      const response = await apiClient.post('/zones', zones);
       return response.data;
     } catch (error) {
-      console.error('Error creating zone:', error);
+      console.error('Error saving zones:', error);
       throw error;
     }
   },
@@ -67,7 +65,7 @@ export const zoneAPI = {
    */
   updateZone: async (zoneId, zoneData) => {
     try {
-      const response = await apiClient.put(`/api/zones/${zoneId}`, zoneData); // 전체 경로 사용
+      const response = await apiClient.put(`/zones/${zoneId}`, zoneData);
       return response.data;
     } catch (error) {
       console.error(`Error updating zone ${zoneId}:`, error);
@@ -81,7 +79,7 @@ export const zoneAPI = {
    */
   deleteZone: async (zoneId) => {
     try {
-      const response = await apiClient.delete(`/api/zones/${zoneId}`); // 전체 경로 사용
+      const response = await apiClient.delete(`/zones/${zoneId}`);
       return response.data;
     } catch (error) {
       console.error(`Error deleting zone ${zoneId}:`, error);
@@ -95,35 +93,42 @@ export const zoneAPI = {
  */
 export const controlAPI = {
   /**
-   * 자동 운전 모드를 시작합니다.
-   * @returns {Promise<Object>} 시스템 상태
+   * 시스템을 시작합니다.
+   * @returns {Promise<Object>} 성공 메시지
    */
-  startAutomatic: async () => {
-    const response = await apiClient.post('/api/control/start_automatic'); // 전체 경로 사용
-    return response.data;
-  },
-  /**
-   * 정비 모드를 시작합니다.
-   * @returns {Promise<Object>} 시스템 상태
-   */
-  startMaintenance: async () => {
-    const response = await apiClient.post('/api/control/start_maintenance'); // 전체 경로 사용
-    return response.data;
+  startSystem: async () => {
+    try {
+      const response = await apiClient.post('/control/start');
+      return response.data;
+    } catch (error) {
+      console.error('Error starting system:', error);
+      throw error;
+    }
   },
   /**
    * 시스템을 중지합니다.
-   * @returns {Promise<Object>} 시스템 상태
+   * @returns {Promise<Object>} 성공 메시지
    */
-  stop: async () => {
-    const response = await apiClient.post('/api/control/stop'); // 전체 경로 사용
-    return response.data;
+  stopSystem: async () => {
+    try {
+      const response = await apiClient.post('/control/stop');
+      return response.data;
+    } catch (error) {
+      console.error('Error stopping system:', error);
+      throw error;
+    }
   },
    /**
    * 현재 시스템 상태를 조회합니다.
    * @returns {Promise<Object>} 시스템 상태
    */
   getStatus: async () => {
-    const response = await apiClient.get('/api/control/status'); // 전체 경로 사용
-    return response.data;
+    try {
+      const response = await apiClient.get('/control/status');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching status:', error);
+      throw error;
+    }
   },
 };

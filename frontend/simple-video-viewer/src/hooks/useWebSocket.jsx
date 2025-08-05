@@ -85,10 +85,8 @@ export function useWebSocket(
       shouldReconnect.current = false;
       // 타이머가 있다면 제거합니다.
       clearTimeout(reconnectTimer.current);
-      // StrictMode의 이중 호출 문제를 피하기 위해, 여기서 직접 close()를 호출하는 대신
-      // onclose 핸들러가 shouldReconnect 플래그를 확인하여 재연결을 막도록 합니다.
       if (wsRef.current) {
-          wsRef.current.close();
+        wsRef.current.close();
       }
     };
   }, [connect]);

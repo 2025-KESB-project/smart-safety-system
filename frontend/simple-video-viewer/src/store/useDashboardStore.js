@@ -21,28 +21,45 @@ const useDashboardStore = create((set, get) => ({
   
   // 2. 액션 (Actions)
 
-  // --- 초기 데이터 로딩 ---
-  initialize: async () => {
-    set({ loading: true, error: null });
+  /**
+   * API에서 초기 로그 데이터를 가져옵니다.
+   * @param {boolean} showLoading - 로딩 인디케이터 표시 여부
+   */
+  fetchLogs: async (showLoading = false) => {
+    if (showLoading) set({ loading: true });
+    set({ error: null });
     try {
-      const [logs, zones] = await Promise.all([
-        logAPI.getLogs(),
-        zoneAPI.getZones(),
-      ]);
-      set({ 
-        logs, 
-        zones, 
-        activeId: logs.length > 0 ? logs[0].id : null 
-      });
+      const res = await fetch('/api/logs?limit=50');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      set({ logs: data });
     } catch (e) {
-      console.error("초기화 실패:", e);
-      set({ error: '데이터를 불러오는 중 오류가 발생했습니다.' });
+      console.error(e);
+      set({ error: '로그를 불러오는 중 오류가 발생했습니다.' });
     } finally {
-      set({ loading: false });
+      if (showLoading) set({ loading: false });
     }
   },
 
-  // --- 로그 관련 액션 ---
+  /**
+   * API에서 위험 구역 목록을 가져옵니다.
+   */
+  fetchZones: async () => {
+    try {
+      const res = await fetch('/api/zones/');
+      if (!res.ok) throw new Error(res.status);
+      const data = await res.json();
+      set({ zones: data });
+    } catch (e) {
+      console.error('구역 조회 실패', e);
+      // 구역 조회 실패는 팝업보다는 콘솔 에러로 처리
+    }
+  },
+
+  /**
+   * 새로운 로그를 실시간으로 추가합니다. (웹소켓용)
+   * @param {object} newLog - 웹소켓으로 수신된 새로운 로그 객체
+   */
   addLog: (newLog) => {
     // 1. 항상 로그 목록에는 추가합니다.
     set(state => ({ logs: [newLog, ...state.logs] }));
@@ -64,29 +81,49 @@ const useDashboardStore = create((set, get) => ({
   },
   setActiveId: (id) => set({ activeId: id }),
 
-  // --- 제어 관련 액션 ---
-  handleControl: async (controlType) => {
-    const { logs } = get();
-    if (controlType === 'start_automatic' && logs.some(l => l.event_type === 'zone_intrusion' || l.event_type === 'fall')) {
-      get().setPopupError('⚠️ 위험 구역에 인원 감지 또는 낙상이 감지되어\n운전 모드로 전환할 수 없습니다.');
-      return;
-    }
+  /**
+   * 에러 팝업 메시지를 설정하고, 5초 후에 자동으로 지웁니다.
+   * @param {string} message - 표시할 에러 메시지
+   */
+  setPopupError: (message) => {
+    set({ popupError: message });
+    setTimeout(() => set({ popupError: null }), 5000);
+  },
 
+  /**
+   * 컨베이어 제어 명령을 서버에 전송합니다.
+   * @param {'start_automatic' | 'start_maintenance' | 'stop'} controlType - 제어 종류
+   */
+  handleControl: async (controlType) => {
     set({ loading: true });
+    const url = `/api/control/${controlType}`;
+
     try {
-      let response;
-      if (controlType === 'start_automatic') {
-        response = await controlAPI.startAutomatic();
-      } else if (controlType === 'start_maintenance') {
-        response = await controlAPI.startMaintenance();
-      } else {
-        response = await controlAPI.stop();
+      const res = await fetch(url, { method: 'POST' });
+
+      // 202 Accepted: 2차 확인 필요
+      if (res.status === 202) {
+        const data = await res.json();
+        if (data.confirmation_required && window.confirm(data.message)) {
+          const confirmedUrl = new URL(url, window.location.origin);
+          confirmedUrl.searchParams.append('confirmed', 'true');
+          // 재귀적으로 자기 자신을 다시 호출
+          await get().handleControl(confirmedUrl.pathname + confirmedUrl.search);
+        }
+        return; // 2차 확인 흐름 종료
       }
-      set({ operationMode: response.operation_mode });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.detail || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      set({ operationMode: data.operation_mode });
+
     } catch (e) {
-      // Axios 에러 객체에서 상세 메시지 추출
-      const errorMsg = e.response?.data?.detail || e.message || '명령 실행 중 오류가 발생했습니다.';
-      get().setPopupError(errorMsg);
+      console.error(e);
+      get().setPopupError(e.message || '명령을 실행하는 중 오류가 발생했습니다.');
     } finally {
       set({ loading: false });
     }
@@ -123,7 +160,7 @@ const useDashboardStore = create((set, get) => ({
     } catch (err) {
       const errorDetail = err.response?.data?.detail || err.message;
       // 에러 상세 정보가 객체나 배열일 경우, 읽기 좋은 JSON 문자열로 변환합니다.
-      const errorMessage = typeof errorDetail === 'object' 
+      const errorMessage = typeof errorDetail === 'object'
         ? JSON.stringify(errorDetail, null, 2)
         : errorDetail;
       get().setPopupError('위험 구역 생성 실패:\n' + errorMessage);
@@ -133,7 +170,7 @@ const useDashboardStore = create((set, get) => ({
   handleUpdateZone: async (ratioPoints) => {
     const { selectedZoneId, imageSize, zones } = get();
     if (!selectedZoneId) return;
-    
+
     const existingZone = zones.find(z => z.id === selectedZoneId);
     if (!existingZone) return;
 
@@ -148,7 +185,7 @@ const useDashboardStore = create((set, get) => ({
       get().exitDangerMode();
     } catch (err) {
       const errorDetail = err.response?.data?.detail || err.message;
-      const errorMessage = typeof errorDetail === 'object' 
+      const errorMessage = typeof errorDetail === 'object'
         ? JSON.stringify(errorDetail, null, 2)
         : errorDetail;
       get().setPopupError('위험 구역 업데이트 실패:\n' + errorMessage);
@@ -158,7 +195,7 @@ const useDashboardStore = create((set, get) => ({
   handleDeleteZone: async () => {
     const { selectedZoneId, zones } = get();
     if (!selectedZoneId) return;
-    
+
     const targetName = zones.find(z => z.id === selectedZoneId)?.name || '선택된 구역';
     if (!window.confirm(`${targetName}을 삭제하시겠습니까?`)) return;
 
@@ -166,10 +203,10 @@ const useDashboardStore = create((set, get) => ({
       await zoneAPI.deleteZone(selectedZoneId);
       await get().fetchZones(); // 목록 새로고침
       // 성공 후 상태 초기화
-      set({ isDangerMode: false, configAction: null, selectedZoneId: null }); 
+      set({ isDangerMode: false, configAction: null, selectedZoneId: null });
     } catch (err) {
       const errorDetail = err.response?.data?.detail || err.message;
-      const errorMessage = typeof errorDetail === 'object' 
+      const errorMessage = typeof errorDetail === 'object'
         ? JSON.stringify(errorDetail, null, 2)
         : errorDetail;
       get().setPopupError('위험 구역 삭제 실패:\n' + errorMessage);
