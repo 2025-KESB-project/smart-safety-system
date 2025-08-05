@@ -4,23 +4,23 @@ from loguru import logger
 
 from server.dependencies import get_state_manager, get_db_service, get_logic_facade
 from server.state_manager import SystemStateManager
-from server.models.status import SystemStatusResponse, ConfirmationResponse
+from server.models.status import SystemStatusResponse, ConfirmationResponse, LogicalStatusResponse
 from server.services.db_service import DBService
 from logic.logic_facade import LogicFacade
 
 router = APIRouter()
 
 def get_complete_status(request: Request, state_manager: SystemStateManager, db_service: DBService) -> dict:
-    """모든 서비스의 상태를 종합하여 완전한 상태 딕셔너리를 반환합니다."""
-    status = state_manager.get_status()
+    """물리적 상태 조회를 제외하고, 캐시된 논리적 상태와 서비스 상태만 반환합니다."""
+    status = state_manager.get_logical_status()  # 블로킹 없는 논리적 상태 조회
     status['database_service'] = db_service.get_status()
-    worker_task = request.app.state.worker_task
-    status['background_worker_alive'] = not worker_task.done() if worker_task else False
+    # NOTE: worker_task.done()은 gRPC와 충돌 가능성이 있어 is_active()로 대체합니다.
+    status['background_worker_alive'] = state_manager.is_active()
     return status
 
 @router.post(
     "/start_automatic",
-    response_model=SystemStatusResponse,
+    response_model=LogicalStatusResponse,
     summary="운전 모드 시작",
     responses={
         202: {"model": ConfirmationResponse, "description": "2차 확인 필요"},
@@ -71,9 +71,9 @@ def start_automatic_mode(
     logger.info("API 요청: '운전 모드' 시작")
     state_manager.start_automatic_mode()
     complete_status = get_complete_status(request, state_manager, db_service)
-    return SystemStatusResponse(**complete_status)
+    return LogicalStatusResponse(**complete_status)
 
-@router.post("/start_maintenance", response_model=SystemStatusResponse, summary="정비 모드 시작 (LOTO)")
+@router.post("/start_maintenance", response_model=LogicalStatusResponse, summary="정비 모드 시작 (LOTO)")
 def start_maintenance_mode(
     request: Request,
     state_manager: SystemStateManager = Depends(get_state_manager),
@@ -85,9 +85,9 @@ def start_maintenance_mode(
     logger.info("API 요청: '정비 모드' 시작 (LOTO)")
     state_manager.start_maintenance_mode()
     complete_status = get_complete_status(request, state_manager, db_service)
-    return SystemStatusResponse(**complete_status)
+    return LogicalStatusResponse(**complete_status)
 
-@router.post("/stop", response_model=SystemStatusResponse, summary="시스템 전체 정지")
+@router.post("/stop", response_model=LogicalStatusResponse, summary="시스템 전체 정지")
 def stop_system(
     request: Request,
     state_manager: SystemStateManager = Depends(get_state_manager),
@@ -99,7 +99,7 @@ def stop_system(
     logger.info("API 요청: 시스템 전체 정지")
     state_manager.stop_system_globally()
     complete_status = get_complete_status(request, state_manager, db_service)
-    return SystemStatusResponse(**complete_status)
+    return LogicalStatusResponse(**complete_status)
 
 @router.get("/status", response_model=SystemStatusResponse, summary="시스템 현재 상태 조회")
 def get_status(
@@ -110,5 +110,8 @@ def get_status(
     """
     시스템의 모든 논리적, 물리적, 서비스 상태를 종합하여 반환합니다.
     """
-    complete_status = get_complete_status(request, state_manager, db_service)
-    return SystemStatusResponse(**complete_status)
+    # 이 API는 물리적 상태를 포함한 전체 상태를 조회해야 합니다.
+    status = state_manager.get_status()
+    status['database_service'] = db_service.get_status()
+    status['background_worker_alive'] = state_manager.is_active()
+    return SystemStatusResponse(**status)

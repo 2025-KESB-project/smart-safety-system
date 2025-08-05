@@ -44,6 +44,13 @@ class SystemStateManager:
         # 두 상태 딕셔너리를 결합하여 반환
         return {**logical_status, **physical_status}
 
+    def get_logical_status(self) -> Dict[str, Any]:
+        """하드웨어와 통신하지 않고, 캐시된 논리적 상태만 빠르게 반환합니다."""
+        return {
+            "system_is_active": self.system_is_active,
+            "operation_mode": self.operation_mode,
+        }
+
     def is_active(self) -> bool:
         """시스템이 현재 활성화 상태인지 확인합니다."""
         return self.system_is_active
