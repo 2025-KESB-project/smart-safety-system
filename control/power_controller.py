@@ -53,7 +53,7 @@ class PowerController:
         """현재 전원이 켜져 있는지 확인합니다."""
         return self._is_power_on
 
-    def get_status(self) -> dict:
+    async def get_status(self) -> dict:
         """PowerController의 현재 상태를 반환합니다."""
         return {
             "is_power_on": self._is_power_on,

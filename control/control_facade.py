@@ -92,11 +92,11 @@ class ControlFacade:
             else:
                 logger.warning(f"알 수 없는 제어 액션 '{action_type}'은 무시됩니다.")
 
-    def get_all_statuses(self) -> dict:
-        """모든 하위 컨트롤러의 상태를 취합하여 반환합니다."""
-        power_status = self.power_controller.get_status()
-        speed_status = self.speed_controller.get_status()
-        alert_status = self.alert_controller.get_status()
+    async def get_all_statuses(self) -> dict:
+        """모든 하위 컨트롤러의 상태를 비동기적으로 취합하여 반환합니다."""
+        power_status = await self.power_controller.get_status()
+        speed_status = await self.speed_controller.get_status()
+        alert_status = await self.alert_controller.get_status()
 
         return {
             "conveyor_is_on": power_status.get("is_power_on"),

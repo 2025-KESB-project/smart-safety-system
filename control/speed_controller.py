@@ -85,7 +85,7 @@ class SpeedController:
     def get_speed_history(self, limit: int = 10) -> list:
         return self.speed_history[-limit:]
 
-    def get_status(self) -> Dict:
+    async def get_status(self) -> Dict:
         is_connected = False
         if not self.mock_mode and self.communicator and self.communicator.serial:
             is_connected = self.communicator.serial.is_open

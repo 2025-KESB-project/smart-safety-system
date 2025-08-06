@@ -5,15 +5,16 @@ import numpy as np
 from loguru import logger
 
 class InputAdapter:
-    def __init__(self, camera_index=0, sensor_pin=None, mock_mode=False):
+    def __init__(self, config: dict):
         """
         InputAdapter는 카메라와 센서로부터 입력을 받아 전처리된 데이터를 반환하는 역할을 합니다.
-        :param camera_index: 카메라 인덱스 (기본값: 0)
-        :param sensor_pin: 센서 핀
-        :param mock_mode: 모의 모드 여부 (카메라 없이 테스트)
+        :param config: 입력 장치 관련 설정을 담은 딕셔너리
         """
-        self.mock_mode = mock_mode
-        if not mock_mode:
+        self.mock_mode = config.get('mock_mode', False)
+        camera_index = config.get('camera_index', 0)
+        sensor_pin = config.get('sensor_pin') # 없으면 None
+
+        if not self.mock_mode:
             # VideoStream 초기화 시 camera_index를 source로 전달
             self.stream = VideoStream(source=camera_index)
         else:

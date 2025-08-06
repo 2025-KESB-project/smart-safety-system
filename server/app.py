@@ -22,7 +22,7 @@ logger.add(
 from server.services.db_service import DBService
 from server.services.zone_service import ZoneService
 from server.services.websocket_service import WebSocketService
-from vision_worker import run_worker_process # 분리된 워커 프로세스 진입점
+from server.vision_worker import run_worker_process # 분리된 워커 프로세스 진입점
 
 # --- 라우터 임포트 ---
 from server.routes import log_api, streaming, alert_ws, zone_api, control_api, log_ws

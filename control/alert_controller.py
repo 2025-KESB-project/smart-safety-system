@@ -104,7 +104,7 @@ class AlertController:
         """모든 장치의 상태를 반환합니다."""
         return {device.value: status for device, status in self.device_status.items()}
 
-    def get_status(self) -> Dict:
+    async def get_status(self) -> Dict:
         """시스템 상태를 반환합니다."""
         return {
             'is_alert_on': any(self.is_alerting.values()),
