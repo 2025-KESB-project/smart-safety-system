@@ -68,6 +68,7 @@ class DangerZoneMapper:
     def check_person_in_zone(self, person_bbox: List[int], zone: Dict[str, Any]) -> Tuple[bool, float]:
         """
         사람이 위험 구역에 있는지 하이브리드 방식으로 정교하게 판단합니다.
+        0. (신규) 바운딩 박스 교차 검사로 대부분의 케이스를 빠르게 필터링합니다.
         1. 주요 포인트 검사로 대부분의 케이스를 빠르게 판단합니다.
         2. 포인트 검사에서 놓치는 특수한 경우(작은 구역에 큰 객체)를 위해 IoU를 계산하여 보완합니다.
 
@@ -79,6 +80,13 @@ class DangerZoneMapper:
             (침입 여부, 신뢰도(IoU 또는 1.0))
         """
         px1, py1, px2, py2 = person_bbox
+        zx, zy, zw, zh = zone['bounding_rect']
+
+        # --- 0단계: 빠른 바운딩 박스 교차 검사 (성능 최적화) ---
+        # 두 사각형이 겹치지 않으면, 절대 침입할 수 없으므로 즉시 종료
+        if px2 < zx or px1 > zx + zw or py2 < zy or py1 > zy + zh:
+            return False, 0.0
+
         person_rect_points = np.array([[px1, py1], [px2, py1], [px2, py2], [px1, py2]], dtype=np.int32)
 
         # --- 1단계: 빠른 포인트 검사 ---

@@ -25,7 +25,8 @@ def get_config() -> Dict[str, Any]:
             }
         },
         "control": {
-            "mock_mode": False # True일 경우, 실제 시리얼 통신 대신 로그만 출력
+            "mock_mode": False, # True일 경우, 실제 시리얼 통신 대신 로그만 출력
+            "serial_port" : "/dev/tty.usbserial-A5069RR4"
         },
         "services": {
             "firebase_credential_path": ROOT_DIR / "config" / "firebase_credential.json"

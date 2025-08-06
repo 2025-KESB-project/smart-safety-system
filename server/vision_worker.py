@@ -37,7 +37,14 @@ def initialize_components(config: Dict[str, Any]):
     # ZoneService는 이제 Vision Worker에서 직접 사용되지 않습니다.
     # detector = Detector(config["detection"], zone_service=zone_service)
     detector = Detector(config["detection"])
-    control_facade = ControlFacade(config["control"])
+    
+    control_config = config.get("control", {})
+    control_facade = ControlFacade(
+        mock_mode=control_config.get("mock_mode", True),
+        serial_port=control_config.get("serial_port"),
+        baud_rate=control_config.get("baud_rate", 9600)
+    )
+    
     state_manager = SystemStateManager()
     logic_facade = LogicFacade(config.get("logic", {}))
 
@@ -115,8 +122,8 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                 current_status = state_manager.get_status()
                 current_mode = current_status.get("operation_mode")
 
-                # 물리적 상태는 ControlFacade를 통해 비동기적으로 가져옴
-                physical_status = await control_facade.get_all_statuses()
+                # 물리적 상태는 ControlFacade를 통해 동기적으로 가져옴 (캐시된 상태)
+                physical_status = control_facade.get_all_statuses()
                 conveyor_is_on = physical_status.get("conveyor_is_on", False)
                 conveyor_speed = physical_status.get("conveyor_speed", 100)
 
@@ -178,7 +185,7 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                 
                 # 최종 상태를 다시 가져와서 화면에 표시
                 logical_status = state_manager.get_status()
-                physical_status = await control_facade.get_all_statuses()
+                physical_status = control_facade.get_all_statuses()
                 final_status = {**logical_status, **physical_status}
 
                 mode_text = f"Mode: {final_status.get('operation_mode', 'N/A')}"
