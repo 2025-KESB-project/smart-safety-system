@@ -61,16 +61,9 @@ async def run_safety_system(app: FastAPI):
     while True:
         try:
             # 1. (신규) 아두이노의 자율 제어 이벤트 확인 및 처리
-            status_events = input_adapter.get_status_events()
-            for event in status_events:
-                if event.get("source") == "AUTO" and event.get("power") == "OFF":
-                    logger.warning(f"Arduino 자율 전원 차단 감지! 시스템을 즉시 중지합니다. 이벤트: {event}")
-                    state_manager.force_stop()
-                    db_service.log_event({
-                        "event_type": "LOG_SYSTEM_FORCED_STOP",
-                        "details": {"message": "Arduino autonomous power OFF detected.", "event": event},
-                        "log_risk_level": "CRITICAL"
-                    })
+            autonomous_events = input_adapter.get_status_events()
+            if autonomous_events:
+                logger.info(f"[Worker] 수신된 자율 제어 이벤트: {autonomous_events}")
 
             # 2. 영상 프레임 획득
             raw_frame = input_adapter.get_frame()
@@ -100,7 +93,8 @@ async def run_safety_system(app: FastAPI):
                     sensor_data=sensor_data,
                     current_mode=current_mode,
                     current_conveyor_status=conveyor_is_on,
-                    current_conveyor_speed=conveyor_speed
+                    current_conveyor_speed=conveyor_speed,
+                    autonomous_events=autonomous_events
                 )
 
                 # 액션 실행 (조정자가 실행 분배)
