@@ -1,0 +1,227 @@
+import asyncio
+import cv2
+import time
+import sys
+from pathlib import Path
+from loguru import logger
+from multiprocessing import Queue
+import torch
+import threading
+
+# --------------------------------------------------------------------------
+# 시스템 경로 설정 및 모듈 임포트
+# --------------------------------------------------------------------------
+project_root = Path(__file__).resolve().parent
+sys.path.append(str(project_root))
+
+from config.config import get_config
+from input_adapter.input_facade import InputAdapter
+from detect.detect_facade import Detector
+from logic.logic_facade import LogicFacade
+from control.control_facade import ControlFacade
+from server.state_manager import SystemStateManager
+# 임시로 ZoneService를 직접 사용. 이상적으로는 서버에서 받아와야 함.
+from server.services.zone_service import ZoneService
+
+# --------------------------------------------------------------------------
+# 컴포넌트 초기화 함수
+# --------------------------------------------------------------------------
+def initialize_components(config):
+    """
+    비전 워커에 필요한 모든 핵심 컴포넌트를 초기화하고 반환합니다.
+    """
+    logger.info("비전 워커 컴포넌트 초기화를 시작합니다...")
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logger.info(f"사용 장치: {device}")
+
+    input_adapter = InputAdapter(config.input)
+    # FIXME: ZoneService는 원래 FastAPI 서버의 DB와 연동되어야 합니다.
+    # 현재는 임시로 워커에서 직접 생성하지만, 추후에는 Queue를 통해 Zone 정보를 받아야 합니다.
+    zone_service = ZoneService(use_firestore=False) # Firestore를 사용하지 않는 모드로 초기화
+    detector = Detector(config.detection, device, zone_service=zone_service)
+    control_facade = ControlFacade(config.control)
+    state_manager = SystemStateManager(control_facade)
+    logic_facade = LogicFacade(config.logic)
+
+    logger.info("모든 비전 워커 컴포넌트가 성공적으로 초기화되었습니다.")
+    
+    return input_adapter, detector, control_facade, state_manager, logic_facade, zone_service
+
+# --------------------------------------------------------------------------
+# 핵심 안전 시스템 워커 함수
+# --------------------------------------------------------------------------
+async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue: Queue):
+    """
+    실시간 영상 처리 및 안전 로직을 수행하는 메인 루프.
+    """
+    logger.info("독립 비전 워커 프로세스를 시작합니다...")
+
+    config = get_config()
+    try:
+        input_adapter, detector, control_facade, state_manager, logic_facade, zone_service = initialize_components(config)
+    except Exception as e:
+        logger.critical(f"컴포넌트 초기화 중 심각한 오류 발생: {e}", exc_info=True)
+        log_queue.put({"type": "LOG", "data": {"event_type": "LOG_SYSTEM_ERROR", "details": {"message": f"Worker initialization failed: {e}"}, "log_level": "CRITICAL"}})
+        return
+
+    # 최초 실행 시 컨베이어 전원을 끄고 시스템 상태를 기록합니다.
+    logger.info("안전 초기화: 컨베이어 전원을 OFF 상태로 시작합니다.")
+    await control_facade.execute_actions([{"type": "POWER_OFF", "details": {"reason": "Worker initialization"}}])
+    log_queue.put({
+        "type": "LOG",
+        "data": {
+            "event_type": "LOG_SYSTEM_INITIALIZED", 
+            "details": {"message": "System worker started, conveyor forced OFF."},
+            "log_level": "SUCCESS"
+        }
+    })
+
+    while True:
+        try:
+            # 1. FastAPI 서버로부터 명령 수신 및 처리
+            if not command_queue.empty():
+                command = command_queue.get_nowait()
+                logger.info(f"FastAPI 서버로부터 명령 수신: {command}")
+                cmd_type = command.get("command")
+                if cmd_type == "START_AUTOMATIC":
+                    state_manager.start_automatic_mode()
+                elif cmd_type == "START_MAINTENANCE":
+                    state_manager.start_maintenance_mode()
+                elif cmd_type == "STOP":
+                    state_manager.stop_system_globally()
+                    # 프로그램 종료 로직 추가
+                    logger.info("STOP 명령 수신, 워커를 종료합니다.")
+                    break
+                elif cmd_type == "UPDATE_ZONES":
+                    zones = command.get("data", [])
+                    # 임시 ZoneService에 직접 업데이트
+                    zone_service.load_zones_from_data(zones)
+                    logger.info(f"{len(zones)}개의 위험 구역 정보 업데이트 완료")
+
+            # 2. 영상 프레임 획득
+            raw_frame = input_adapter.get_frame()
+            if raw_frame is None:
+                await asyncio.sleep(0.1)
+                continue
+            
+            display_frame = raw_frame.copy()
+
+            # 3. 시스템 활성화 상태일 때만 안전 로직 및 시각화 수행
+            if state_manager.is_active():
+                sensor_data = input_adapter.get_sensor_data()
+                current_status = state_manager.get_status()
+                current_mode = current_status.get("operation_mode")
+                conveyor_is_on = current_status.get("conveyor_is_on", False)
+                conveyor_speed = current_status.get("conveyor_speed", 100)
+
+                # 객체 탐지
+                detection_result = detector.detect(raw_frame)
+
+                # 로직 처리
+                actions = logic_facade.process(
+                    detection_result=detection_result,
+                    sensor_data=sensor_data,
+                    current_mode=current_mode,
+                    current_conveyor_status=conveyor_is_on,
+                    current_conveyor_speed=conveyor_speed
+                )
+
+                # 액션 실행
+                control_actions = []
+                for action in actions:
+                    action_type = action.get("type")
+                    if action_type in ['POWER_ON', 'POWER_OFF', 'REDUCE_SPEED_50', 'RESUME_FULL_SPEED'] or action_type.startswith('TRIGGER_ALARM_'):
+                        control_actions.append(action)
+                    
+                    elif action_type and action_type.startswith('LOG_'):
+                        # logic_facade에서 생성된 로그 데이터를 그대로 사용
+                        log_data = logic_facade.create_log_data(action, logic_facade.last_risk_analysis)
+                        log_queue.put({"type": "LOG", "data": log_data})
+                    
+                    elif action_type == 'NOTIFY_UI':
+                        log_queue.put({"type": "ALERT", "data": action.get("details", {})})
+
+                if control_actions:
+                    await control_facade.execute_actions(control_actions)
+
+                # 시각화 및 스트리밍 프레임 업데이트
+                display_frame = detector.draw_detections(raw_frame, detection_result)
+                final_status = state_manager.get_status()
+                mode_text = f"Mode: {final_status.get('operation_mode', 'N/A')}"
+                is_on = final_status.get('conveyor_is_on', False)
+                speed = final_status.get('conveyor_speed', 100)
+
+                if not is_on:
+                    status_text = "Status: STOPPED"
+                elif speed < 100:
+                    status_text = f"Status: SLOWDOWN ({speed}%)"
+                else:
+                    status_text = "Status: RUNNING"
+
+                risk_factors = logic_facade.last_risk_analysis.get("risk_factors", [])
+                risk_text = "Risk: DETECTED" if risk_factors else "Risk: SAFE"
+                risk_color = (0, 0, 255) if risk_factors else (0, 255, 0)
+
+                cv2.putText(display_frame, mode_text, (15, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
+                cv2.putText(display_frame, status_text, (15, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+                cv2.putText(display_frame, risk_text, (15, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, risk_color, 2)
+            
+            else:
+                cv2.putText(display_frame, "SYSTEM INACTIVE", (15, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                await asyncio.sleep(0.5)
+
+            # 4. 처리된 프레임을 FastAPI 서버로 전송
+            if not frame_queue.full():
+                # 프레임을 JPEG로 인코딩하여 바이트로 변환
+                _, encoded_frame = cv2.imencode('.jpg', display_frame)
+                frame_queue.put_nowait(encoded_frame.tobytes())
+            
+            await asyncio.sleep(0.01)
+
+        except Exception as e:
+            logger.error(f"비전 워커 루프에서 예외 발생: {e}", exc_info=True)
+            log_queue.put({"type": "LOG", "data": {"event_type": "LOG_SYSTEM_ERROR", "details": {"message": str(e)}, "log_level": "ERROR"}})
+            await asyncio.sleep(5)
+
+    input_adapter.release()
+    logger.info("비전 워커 프로세스가 종료되었습니다.")
+
+# --------------------------------------------------------------------------
+# 워커 실행기
+# --------------------------------------------------------------------------
+def run_worker_process(command_q: Queue, log_q: Queue, frame_q: Queue):
+    """
+    asyncio 이벤트 루프를 설정하고 run_safety_system을 실행하는 진입점 함수.
+    """
+    try:
+        asyncio.run(run_safety_system(command_q, log_q, frame_q))
+    except KeyboardInterrupt:
+        logger.info("비전 워커가 사용자에 의해 중지되었습니다.")
+
+if __name__ == '__main__':
+    # 이 파일을 직접 실행할 때 테스트를 위한 코드
+    logger.info("Vision worker를 단독으로 실행합니다 (테스트 모드)")
+    cmd_q = Queue()
+    log_q = Queue()
+    frame_q = Queue(maxsize=2)
+
+    # 테스트를 위해 15초 후에 정지 명령 전송
+    def send_stop_command():
+        time.sleep(15)
+        cmd_q.put({"command": "STOP"})
+        logger.info("테스트: STOP 명령 전송")
+
+    
+    threading.Thread(target=send_stop_command, daemon=True).start()
+
+    # 로그 큐 모니터링
+    def log_monitor():
+        while True:
+            if not log_q.empty():
+                print(f"[LOG_QUEUE]: {log_q.get()}")
+            time.sleep(0.1)
+    
+    threading.Thread(target=log_monitor, daemon=True).start()
+
+    run_worker_process(cmd_q, log_q, frame_q)

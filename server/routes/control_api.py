@@ -1,117 +1,39 @@
-from fastapi import APIRouter, Depends, Request, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Request
 from loguru import logger
+from multiprocessing import Queue
 
-from server.dependencies import get_state_manager, get_db_service, get_logic_facade
-from server.state_manager import SystemStateManager
-from server.models.status import SystemStatusResponse, ConfirmationResponse, LogicalStatusResponse
-from server.services.db_service import DBService
-from logic.logic_facade import LogicFacade
+from server.dependencies import get_command_queue
 
 router = APIRouter()
 
-def get_complete_status(request: Request, state_manager: SystemStateManager, db_service: DBService) -> dict:
-    """물리적 상태 조회를 제외하고, 캐시된 논리적 상태와 서비스 상태만 반환합니다."""
-    status = state_manager.get_logical_status()  # 블로킹 없는 논리적 상태 조회
-    status['database_service'] = db_service.get_status()
-    # NOTE: worker_task.done()은 gRPC와 충돌 가능성이 있어 is_active()로 대체합니다.
-    status['background_worker_alive'] = state_manager.is_active()
-    return status
-
-@router.post(
-    "/start_automatic",
-    response_model=LogicalStatusResponse,
-    summary="운전 모드 시작",
-    responses={
-        202: {"model": ConfirmationResponse, "description": "2차 확인 필요"},
-        409: {"description": "안전 문제로 인한 모드 전환 불가"}
-    }
-)
-def start_automatic_mode(
-    request: Request,
-    state_manager: SystemStateManager = Depends(get_state_manager),
-    db_service: DBService = Depends(get_db_service),
-    logic_facade: LogicFacade = Depends(get_logic_facade),
-    confirmed: bool = Query(False, description="사용자 2차 확인 여부")
-):
+@router.post("/start_automatic", summary="운전 모드 시작 요청")
+def start_automatic_mode(request: Request, command_queue: Queue = Depends(get_command_queue)):
     """
-    안전 시스템의 논리적 상태를 '운전 모드(AUTOMATIC)'로 전환합니다.
-    정비 모드(MAINTENANCE)에서 전환 시, 안전 조건을 확인하고 2차 확인을 요구할 수 있습니다.
+    Vision Worker에 '운전 모드(AUTOMATIC)' 시작 명령을 전송합니다.
+    안전 확인 및 최종 실행은 Worker가 담당합니다.
     """
-    current_mode = state_manager.get_mode()
+    logger.info("API 요청: '운전 모드' 시작 명령을 Worker에 전송합니다.")
+    command_queue.put({"command": "START_AUTOMATIC"})
+    return {"message": "Automatic mode start command sent to worker."}
 
-    # 정비 모드에서 운전 모드로 전환하려는 경우, 안전 규칙을 적용합니다.
-    if current_mode == 'MAINTENANCE':
-        # 1. 실시간 위험 평가
-        # 백그라운드 워커가 마지막으로 분석한 위험 평가 결과를 직접 사용합니다.
-        last_analysis = logic_facade.last_risk_analysis or {"risk_factors": []}
-        risk_factors = last_analysis.get("risk_factors", [])
-
-        if risk_factors:
-            logger.warning(f"LOTO 활성 중 위험({risk_factors})이 감지되어 운전 모드 전환을 차단했습니다.")
-            raise HTTPException(
-                status_code=409,
-                detail=f"위험 구역 내 작업자 또는 센서({[f['type'] for f in risk_factors]})가 감지되어 운전 모드로 전환할 수 없습니다."
-            )
-
-        # 2. 사용자 2차 확인
-        if not confirmed:
-            logger.info("LOTO 해제 1단계: 2차 확인을 요구합니다.")
-            return JSONResponse(
-                status_code=202,
-                content={
-                    "confirmation_required": True,
-                    "message": "작업자가 위험 구역에 없는지 다시 한번 확인했습니까?"
-                }
-            )
-        
-        logger.info("LOTO 해제 2단계: 사용자 확인 완료.")
-
-    # 모든 검사를 통과했거나, 정비 모드가 아닌 상태에서 시작하는 경우
-    logger.info("API 요청: '운전 모드' 시작")
-    state_manager.start_automatic_mode()
-    complete_status = get_complete_status(request, state_manager, db_service)
-    return LogicalStatusResponse(**complete_status)
-
-@router.post("/start_maintenance", response_model=LogicalStatusResponse, summary="정비 모드 시작 (LOTO)")
-def start_maintenance_mode(
-    request: Request,
-    state_manager: SystemStateManager = Depends(get_state_manager),
-    db_service: DBService = Depends(get_db_service)
-):
+@router.post("/start_maintenance", summary="정비 모드 시작 요청 (LOTO)")
+def start_maintenance_mode(request: Request, command_queue: Queue = Depends(get_command_queue)):
     """
-    안전 시스템의 논리적 상태를 '정비 모드(MAINTENANCE)'로 전환합니다.
+    Vision Worker에 '정비 모드(MAINTENANCE)' 시작 명령을 전송합니다.
     """
-    logger.info("API 요청: '정비 모드' 시작 (LOTO)")
-    state_manager.start_maintenance_mode()
-    complete_status = get_complete_status(request, state_manager, db_service)
-    return LogicalStatusResponse(**complete_status)
+    logger.info("API 요청: '정비 모드' 시작 명령을 Worker에 전송합니다.")
+    command_queue.put({"command": "START_MAINTENANCE"})
+    return {"message": "Maintenance mode start command sent to worker."}
 
-@router.post("/stop", response_model=LogicalStatusResponse, summary="시스템 전체 정지")
-def stop_system(
-    request: Request,
-    state_manager: SystemStateManager = Depends(get_state_manager),
-    db_service: DBService = Depends(get_db_service)
-):
+@router.post("/stop", summary="시스템 전체 정지 요청")
+def stop_system(request: Request, command_queue: Queue = Depends(get_command_queue)):
     """
-    모든 시스템 작동을 중지하고 논리적 상태를 비활성으로 전환합니다.
+    Vision Worker에 시스템 전체 정지 명령을 전송합니다.
     """
-    logger.info("API 요청: 시스템 전체 정지")
-    state_manager.stop_system_globally()
-    complete_status = get_complete_status(request, state_manager, db_service)
-    return LogicalStatusResponse(**complete_status)
+    logger.info("API 요청: 시스템 전체 정지 명령을 Worker에 전송합니다.")
+    command_queue.put({"command": "STOP"})
+    return {"message": "System stop command sent to worker."}
 
-@router.get("/status", response_model=SystemStatusResponse, summary="시스템 현재 상태 조회")
-def get_status(
-    request: Request,
-    state_manager: SystemStateManager = Depends(get_state_manager),
-    db_service: DBService = Depends(get_db_service)
-):
-    """
-    시스템의 모든 논리적, 물리적, 서비스 상태를 종합하여 반환합니다.
-    """
-    # 이 API는 물리적 상태를 포함한 전체 상태를 조회해야 합니다.
-    status = state_manager.get_status()
-    status['database_service'] = db_service.get_status()
-    status['background_worker_alive'] = state_manager.is_active()
-    return SystemStatusResponse(**status)
+# 참고: 상태 조회(get_status) API는 app.py의 메인 /status 엔드포인트로 역할이 이전되었습니다.
+# 해당 API는 Worker 프로세스의 생존 여부만 확인합니다.
+# 상세한 시스템 상태(모드, 속도 등)는 Worker가 관리하며, 필요한 경우 WebSocket을 통해 UI로 전송됩니다.
