@@ -16,10 +16,22 @@ class RuleEngine:
         self.last_risk_factors = set() # 마지막 위험 요소를 기억하여 상태 변화를 감지
         logger.info("RuleEngine 초기화 완료. (사실 기반)")
 
-    def decide_actions(self, mode: str, risk_analysis: Dict[str, Any], conveyor_is_on: bool, current_speed_percent: int) -> List[Dict[str, Any]]:
+    def decide_actions(self, mode: str, risk_analysis: Dict[str, Any], conveyor_is_on: bool, current_speed_percent: int, autonomous_events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        현재 상태에 따라 수행해야 할 행동 목록을 결정합니다.
+        현재 상태와 자율 제어 이벤트를 바탕으로 수행해야 할 행동 목록을 결정합니다.
         """
+        # --- 최우선 규칙: 아두이노의 자율 정지 이벤트가 있었는지 확인 ---
+        if any(e.get("source") == "AUTO" for e in autonomous_events):
+            # 자율 정지 이벤트가 감지되면, 다른 모든 로직을 무시하고
+            # 시스템이 이 사실을 인지했음을 기록하는 로그 액션만 반환합니다.
+            if "AUTONOMOUS_STOP" not in self.last_risk_factors:
+                return [{
+                    "type": "LOG_AUTONOMOUS_STOP_ACKNOWLEDGED",
+                    "details": {"message": "Arduino's autonomous stop has been acknowledged."}
+                }]
+            else:
+                return [] # 이미 인지했다면 아무 액션도 취하지 않음
+
         actions = []
         risk_factors = risk_analysis.get("risk_factors", [])
         current_risk_types = {f["type"] for f in risk_factors}
