@@ -55,14 +55,6 @@ class LogicFacade:
             sensor_data,
             conveyor_status=current_conveyor_status
         )
-        
-        # --- 디버깅 로그 추가 ---
-        logger.debug(
-            f"[LogicFacade] RuleEngine 입력: mode={current_mode}, "
-            f"conveyor_on={current_conveyor_status}, speed={current_conveyor_speed}, "
-            f"risk_factors={[f.get('type') for f in self.last_risk_analysis.get('risk_factors', [])]}"
-        )
-        # ----------------------
 
         # 2. 최종 행동 결정 (외부에서 전달받은 모드와 위험도 분석 결과를 기반으로)
         actions = self.rule_engine.decide_actions(
