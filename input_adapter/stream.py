@@ -7,7 +7,7 @@ from loguru import logger
 class VideoStream:
     """다양한 비디오 소스를 처리하는 스트림 클래스"""
 
-    def __init__(self, source=0, resolution=(1920, 1080), fps=30):
+    def __init__(self, source=0, resolution=(1280, 720), fps=30):
         """
         비디오 스트림을 초기화합니다.
         :param source: 카메라 인덱스 또는 비디오 파일 경로

@@ -2,19 +2,34 @@ from fastapi import APIRouter, Depends, Request
 from loguru import logger
 from multiprocessing import Queue
 
-from server.dependencies import get_command_queue
+from server.dependencies import get_command_queue, get_zone_service
+from server.services.zone_service import ZoneService
 
 router = APIRouter()
 
 @router.post("/start_automatic", summary="운전 모드 시작 요청")
-def start_automatic_mode(request: Request, command_queue: Queue = Depends(get_command_queue)):
+def start_automatic_mode(
+    request: Request, 
+    command_queue: Queue = Depends(get_command_queue),
+    zone_service: ZoneService = Depends(get_zone_service)
+):
     """
-    Vision Worker에 '운전 모드(AUTOMATIC)' 시작 명령을 전송합니다.
-    안전 확인 및 최종 실행은 Worker가 담당합니다.
+    Vision Worker에 Zone 정보와 함께 '운전 모드(AUTOMATIC)' 시작 명령을 전송합니다.
     """
-    logger.info("API 요청: '운전 모드' 시작 명령을 Worker에 전송합니다.")
+    logger.info("API 요청: Zone 정보와 함께 '운전 모드' 시작 명령을 Worker에 전송합니다.")
+    
+    # 1. DB에서 최신 Zone 정보를 가져옵니다.
+    zones = zone_service.get_all_zones()
+    if not zones:
+        logger.warning("DB에 설정된 위험 구역 정보가 없습니다. 빈 목록을 Worker에 전송합니다.")
+    
+    # 2. Worker에 Zone 정보를 먼저 업데이트하도록 명령합니다.
+    command_queue.put({"command": "UPDATE_ZONES", "data": zones})
+    
+    # 3. 운전 모드 시작을 명령합니다.
     command_queue.put({"command": "START_AUTOMATIC"})
-    return {"message": "Automatic mode start command sent to worker."}
+    
+    return {"message": f"Zone info ({len(zones)} zones) and start command sent to worker."}
 
 @router.post("/start_maintenance", summary="정비 모드 시작 요청 (LOTO)")
 def start_maintenance_mode(request: Request, command_queue: Queue = Depends(get_command_queue)):

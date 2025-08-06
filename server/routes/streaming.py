@@ -27,21 +27,20 @@ def generate_frames(frame_queue: Queue):
     last_frame_time = time.time()
     
     while True:
-        if not frame_queue.empty():
-            encoded_frame_bytes = frame_queue.get_nowait()
+        try:
+            # 큐에서 프레임을 가져오되, 최대 1초간 대기
+            encoded_frame_bytes = frame_queue.get(timeout=1.0)
             last_frame_time = time.time()
-            yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + 
+            yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' +
                    encoded_frame_bytes + b'\r\n')
-        else:
-            # 5초 이상 새 프레임이 없으면 경고 이미지 전송
-            if time.time() - last_frame_time > 5.0:
-                placeholder = create_placeholder_image("Vision Worker not responding...\nCheck server logs.")
-                _, encoded_image = cv2.imencode(".jpg", placeholder)
-                yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + 
-                       encoded_image.tobytes() + b'\r\n')
-                time.sleep(1)
-            else:
-                time.sleep(0.01) # 짧은 대기
+        except Exception:
+            # 1초 동안 새 프레임이 없으면 경고 메시지 표시
+            logger.warning("프레임 큐에서 1초 이상 응답이 없습니다. Vision Worker 상태를 확인하세요.")
+            placeholder = create_placeholder_image("Vision Worker not responding...\nCheck server logs.")
+            _, encoded_image = cv2.imencode(".jpg", placeholder)
+            yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' +
+                   encoded_image.tobytes() + b'\r\n')
+            time.sleep(1) # 경고 이미지 표시 후 잠시 대기
 
 @router.get("/video_feed", summary="실시간 영상 스트리밍")
 def video_feed(frame_queue: Queue = Depends(get_frame_queue)):

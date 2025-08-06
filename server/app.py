@@ -86,7 +86,24 @@ async def lifespan(app: FastAPI):
     worker_process.start()
     logger.success(f"Vision Worker 프로세스를 시작했습니다 (PID: {worker_process.pid}).")
 
-    # 4. Queue 리스너를 비동기 태스크로 시작
+    # 4. 실시간 Zone 업데이트 리스너 등록
+    zone_service = app.state.zone_service
+    
+    def on_zone_snapshot(doc_snapshot, changes, read_time):
+        logger.info(f"Firestore에서 Zone 변경 감지. {len(doc_snapshot)}개의 Zone으로 업데이트합니다.")
+        zones_data = []
+        for doc in doc_snapshot:
+            zone = doc.to_dict()
+            zone['id'] = doc.id
+            zones_data.append(zone)
+        
+        # Worker에게 Zone 정보 업데이트 명령 전송
+        command_queue.put({"command": "UPDATE_ZONES", "data": zones_data})
+
+    zone_service.register_listener(on_zone_snapshot)
+    logger.success("Firestore 실시간 Zone 리스너를 등록했습니다.")
+
+    # 5. Queue 리스너를 비동기 태스크로 시작
     listener_task = asyncio.create_task(queue_listener(log_queue, app))
     app.state.listener_task = listener_task
     logger.success("Queue 리스너 태스크를 시작했습니다.")

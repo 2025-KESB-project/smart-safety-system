@@ -34,15 +34,16 @@ def initialize_components(config: Dict[str, Any]):
     logger.info("비전 워커 컴포넌트 초기화를 시작합니다...")
 
     input_adapter = InputAdapter(config["input"])
-    zone_service = ZoneService(use_firestore=False)
-    detector = Detector(config["detection"], zone_service=zone_service)
+    # ZoneService는 이제 Vision Worker에서 직접 사용되지 않습니다.
+    # detector = Detector(config["detection"], zone_service=zone_service)
+    detector = Detector(config["detection"])
     control_facade = ControlFacade(config["control"])
     state_manager = SystemStateManager()
     logic_facade = LogicFacade(config.get("logic", {}))
 
     logger.info("모든 비전 워커 컴포넌트가 성공적으로 초기화되었습니다.")
     
-    return input_adapter, detector, control_facade, state_manager, logic_facade, zone_service
+    return input_adapter, detector, control_facade, state_manager, logic_facade
 
 # --------------------------------------------------------------------------
 # 핵심 안전 시스템 워커 함수
@@ -55,7 +56,7 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
 
     config = get_config()
     try:
-        input_adapter, detector, control_facade, state_manager, logic_facade, zone_service = initialize_components(config)
+        input_adapter, detector, control_facade, state_manager, logic_facade = initialize_components(config)
     except Exception as e:
         logger.critical(f"컴포넌트 초기화 중 심각한 오류 발생: {e}", exc_info=True)
         log_queue.put({"type": "LOG", "data": {"event_type": "LOG_SYSTEM_ERROR", "details": {"message": f"Worker initialization failed: {e}"}, "log_level": "CRITICAL"}})
@@ -91,7 +92,7 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                     break
                 elif cmd_type == "UPDATE_ZONES":
                     zones = command.get("data", [])
-                    zone_service.load_zones_from_data(zones)
+                    detector.danger_zone_mapper.update_zones_from_data(zones)
                     logger.info(f"Vision Worker의 Zone 정보가 {len(zones)}개로 업데이트되었습니다.")
 
             # 2. 영상 프레임 획득
