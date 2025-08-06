@@ -23,6 +23,7 @@ from logic.logic_facade import LogicFacade
 from control.control_facade import ControlFacade
 from server.state_manager import SystemStateManager
 from server.services.zone_service import ZoneService
+from core.serial_communicator import SerialCommunicator
 
 # --------------------------------------------------------------------------
 # 컴포넌트 초기화 함수
@@ -37,12 +38,11 @@ def initialize_components(config: Dict[str, Any]):
     # ZoneService는 이제 Vision Worker에서 직접 사용되지 않습니다.
     # detector = Detector(config["detection"], zone_service=zone_service)
     detector = Detector(config["detection"])
-    
+    communicator= SerialCommunicator(port=config["serial"]["port"], baud_rate=config["serial"]["baud_rate"], mock_mode=config["serial"]["mock_mode"])
     control_config = config.get("control", {})
     control_facade = ControlFacade(
         mock_mode=control_config.get("mock_mode", True),
-        serial_port=control_config.get("serial_port"),
-        baud_rate=control_config.get("baud_rate", 9600)
+        communicator=communicator
     )
     
     state_manager = SystemStateManager()
@@ -71,7 +71,7 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
 
     # 최초 실행 시 컨베이어 전원을 끄고 시스템 상태를 기록합니다.
     logger.info("안전 초기화: 컨베이어 전원을 OFF 상태로 시작합니다.")
-    await control_facade.execute_actions([{"type": "POWER_OFF", "details": {"reason": "Worker initialization"}}])
+    control_facade.execute_actions([{"type": "POWER_OFF", "details": {"reason": "Worker initialization"}}])
     log_queue.put({
         "type": "LOG",
         "data": {
@@ -178,7 +178,7 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                         log_queue.put({"type": "ALERT", "data": action.get("details", {})})
 
                 if control_actions:
-                    await control_facade.execute_actions(control_actions)
+                    control_facade.execute_actions(control_actions)
 
                 # 시각화 및 스트리밍 프레임 업데이트
                 display_frame = detector.draw_detections(raw_frame, detection_result)
