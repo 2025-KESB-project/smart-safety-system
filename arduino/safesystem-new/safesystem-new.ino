@@ -31,10 +31,11 @@ void setup() {
 
   // 릴레이 핀 초기화
   pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, HIGH); // 릴레이는 기본 OFF 상태
+  digitalWrite(RELAY_PIN, LOW); // 릴레이는 기본 OFF 상태
 
   // 부저 핀 초기화
   pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW); // 부저는 기본적으로 OFF (LOW 상태)로 시작
 
   // PIR 센서 핀 초기화
   pinMode(PIR_PIN, INPUT);
@@ -72,7 +73,7 @@ void handle_serial_commands() {
         analogWrite(MOTOR_ENA, 0); // 혹시 몰라서 모터도 OFF
         Serial.println("Command: p0 -> Power OFF (Relay LOW) & Motor Stopped");
       } else {
-        digitalWrite(RELAY_PIN, LOW);  // 릴레이 OFF
+        digitalWrite(RELAY_PIN, HIGH);  // 릴레이 ON
         Serial.println("Command: p1 -> Power ON (Relay HIGH)");
       }
     }
@@ -81,6 +82,7 @@ void handle_serial_commands() {
       int pwmVal = cmd.substring(1).toInt();
       if (pwmVal > 0) {
         pwmVal = constrain(pwmVal, 0, 255);
+        digitalWrite(RELAY_PIN, HIGH);   // 전원 ON
         digitalWrite(MOTOR_IN1, HIGH);
         digitalWrite(MOTOR_IN2, LOW);
         analogWrite(MOTOR_ENA, pwmVal);
@@ -90,6 +92,7 @@ void handle_serial_commands() {
         digitalWrite(MOTOR_IN1, LOW);
         digitalWrite(MOTOR_IN2, LOW);
         analogWrite(MOTOR_ENA, 0);
+        digitalWrite(RELAY_PIN, LOW);    // 전원 OFF
         Serial.println("Command: s -> Motor stopped");
       }
     }
@@ -117,7 +120,7 @@ void handle_serial_commands() {
  * @param note_frequency 재생할 음의 주파수 (Hz)
  */
 void play_alert_sound(int note_frequency) {
-  for (int i = 0; i < 3; i++) { // 반복 횟수를 3번으로 줄임
+  for (int i = 0; i < 9; i++) { // 반복 횟수를 9번으로 늘림
     tone(BUZZER_PIN, note_frequency, 150); // 150ms 동안 소리 재생
     delay(200); // 200ms 쉼
   }
@@ -133,7 +136,7 @@ void handle_sensors() {
 
   // 상태가 "감지(0)"로 변경된 경우, 즉시 전원을 차단합니다.
   if (pir_state == 0 && last_pir_state != 0) {
-    digitalWrite(RELAY_PIN, LOW);  // 릴레이 ON
+    digitalWrite(RELAY_PIN, LOW);  // 릴레이 OFF
     digitalWrite(MOTOR_IN1, LOW);
     digitalWrite(MOTOR_IN2, LOW);
     analogWrite(MOTOR_ENA, 0);  // 혹시 몰라 모터도 정지
