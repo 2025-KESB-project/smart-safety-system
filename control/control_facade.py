@@ -36,42 +36,56 @@ class ControlFacade:
 
     def execute_actions(self, actions: List[Dict[str, Any]]):
         """
-        '두뇌(Logic Layer)'가 결정한 액션 목록을 받아 '근육'을 움직입니다.
+        '두뇌(Logic Layer)'가 결정한 액션 목록을 받아, 현재 상태와 비교하여
+        불필요한 중복 명령을 제외하고 '근육'을 움직입니다.
         """
         if not actions:
             return
 
-        # 나중에 우선순위가 필요할 경우를 대비해 정렬할 수 있습니다.
-        # actions.sort(key=lambda x: x.get('priority', 100))
+        # 1. 현재 하드웨어 상태를 미리 조회합니다.
+        current_statuses = self.get_all_statuses()
+        is_on = current_statuses.get("conveyor_is_on")
+        current_speed = current_statuses.get("conveyor_speed")
+
+        logger.debug(f"[ControlFacade] 수신된 액션: {[a.get('type') for a in actions]}, 현재 상태: Power={is_on}, Speed={current_speed}")
 
         for action in actions:
             action_type = action.get("type")
             details = action.get("details", {})
             reason = details.get('reason', '자동 시스템 로직에 의해')
 
-            # action_type이 문자열이 아닌 경우(None 등)를 건너뛰는 안전장치
             if not isinstance(action_type, str):
                 logger.warning(f"잘못되었거나 누락된 액션 타입: {action}")
                 continue
 
+            # 2. 현재 상태와 비교하여 중복 명령인지 확인합니다.
+            if action_type == "POWER_OFF" and not is_on:
+                # logger.debug("명령 무시: 이미 전원이 꺼져 있습니다.")
+                continue
+            if action_type == "POWER_ON" and is_on:
+                # logger.debug("명령 무시: 이미 전원이 켜져 있습니다.")
+                continue
+            if action_type == "REDUCE_SPEED_50" and current_speed == 50:
+                # logger.debug("명령 무시: 이미 50% 속도입니다.")
+                continue
+            if action_type == "RESUME_FULL_SPEED" and current_speed == 100:
+                # logger.debug("명령 무시: 이미 100% 속도입니다.")
+                continue
+
             logger.debug(f"Executing action: {action_type} with reason: {reason}")
 
-            # Action 타입을 보고 적절한 컨트롤러의 메소드를 호출합니다.
-            if action_type == "STOP_POWER" or action_type == "PREVENT_POWER_ON" or action_type == "POWER_OFF":
-                # 2중 안전 장치: 릴레이 전원과 모터 속도를 모두 차단합니다.
+            # 3. 실제 실행이 필요한 액션만 컨트롤러에 전달합니다.
+            if action_type == "POWER_OFF":
                 self.power_controller.power_off(reason)
-                self.speed_controller.stop_conveyor(reason)
-            elif action_type == "POWER_ON": # API 등 외부 요청을 위한 액션
+            elif action_type == "POWER_ON":
                 self.power_controller.power_on(reason)
             elif action_type == "REDUCE_SPEED_50":
                 self.speed_controller.slow_down_50_percent(reason)
             elif action_type == "RESUME_FULL_SPEED":
                 self.speed_controller.resume_full_speed(reason)
             elif action_type.startswith("TRIGGER_ALARM_"):
-                # "TRIGGER_ALARM_CRITICAL" -> "critical"
                 level_str = action_type.replace("TRIGGER_ALARM_", "").lower()
                 try:
-                    # 문자열을 AlertLevel Enum 멤버로 변환
                     alert_level = AlertLevel(level_str)
                     self.alert_controller.trigger_alert(level=alert_level, message=reason)
                 except ValueError:
@@ -84,7 +98,15 @@ class ControlFacade:
                 except ValueError:
                     logger.error(f"알 수 없는 경고 중지 레벨 문자열: '{level_str}'")
             else:
-                logger.warning(f"알 수 없는 제어 액션 타입 '{action_type}'은 무시됩니다.")
+                # STOP_POWER, PREVENT_POWER_ON 등은 POWER_OFF와 동일하게 처리
+                if action_type in ["STOP_POWER", "PREVENT_POWER_ON"]:
+                    if not is_on:
+                        # logger.debug("명령 무시: 이미 전원이 꺼져 있습니다.")
+                        continue
+                    self.power_controller.power_off(reason)
+                    self.speed_controller.stop_conveyor(reason)
+                else:
+                    logger.warning(f"알 수 없는 제어 액션 타입 '{action_type}'은 무시됩니다.")
 
     def get_power_status(self) -> dict:
         """PowerController의 현재 상태를 조회하여 반환합니다."""
