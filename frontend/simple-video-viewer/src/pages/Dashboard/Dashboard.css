@@ -74,68 +74,41 @@ html, body {
   box-sizing: border-box;
 }
 
-/* 좌측 패널: 가운데 정렬 */
-.left-panel {
+/* 좌측 제어 및 로그 패널 */
+.control-panel {
+  flex: none;      /* 고정 크기 */
+  width: 500px;    /* 너비 지정 */
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  height: 100%; /* 부모 컨테이너(main-layout)에서 남은 높이 채우기 */
+}
+
+.control-board {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 0 6px rgba(0,0,0,0.1);
+}
+
+.log-board {
+  flex: 1; /* 남은 공간을 모두 차지 */
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* 자식 요소의 높이가 넘칠 경우를 대비 */
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 0 6px rgba(0,0,0,0.1);
+}
+
+/* 우측 스트림 패널 */
+.stream-panel {
   flex: 3;
   display: flex;
   justify-content: center;
   align-items: center;
   min-height: 0;  /* flex children 높이 제한 해제 */
-  padding: 0;     /* wrapper padding 간섭 방지 */
-}
-
-/* live-stream-wrapper: 고정 너비/비율, 중앙 배치 */
-.live-stream-wrapper {
-  position: relative;
-  width: 90%;           /* 좌측 패널 너비의 90% */
-  aspect-ratio: 16/9;   /* 16:9 비율로 유지 */
-  background: #f9f9f9;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
-
-/* ──────────── 자식 컨텐츠 전부 꽉 채우기 ──────────── */
-
-/* 1) DangerZoneSelector 모드의 img / canvas */
-.live-stream-wrapper .dz-wrapper,
-.live-stream-wrapper .dz-wrapper img,
-.live-stream-wrapper .dz-wrapper .dz-canvas {
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.live-stream-wrapper .dz-wrapper .dz-canvas {
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
-  width: 100%;
-  height: 100%;
-}
-
-/* 2) 일반 스트림 모드의 live-stream-container & video */
-.live-stream-wrapper .live-stream-container {
-  position: absolute;
-  top: 0; left: 0; width: 100%; height: 100%;
-  overflow: hidden;
-}
-.live-stream-wrapper .live-stream-container video,
-.live-stream-wrapper .live-stream-container img {
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  object-fit: cover;
-}
-
-/* 우측 패널 */
-.right-panel {
-  flex: none;      /* 고정 크기 */
-  width: 360px;    /* 컨트롤 보드와 동일한 너비 */
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
 }
 
 /* 컨트롤 보드 */

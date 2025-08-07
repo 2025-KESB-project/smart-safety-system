@@ -97,8 +97,43 @@ export default function Dashboard() {
 
       {/* 메인 레이아웃 */}
       <div className="main-layout">
-        {/* 왼쪽 패널 */}
-        <div className="left-panel">
+        {/* 제어 및 로그 패널 (좌측) */}
+        <div className="control-panel">
+          {loading ? <div className="loading">로딩 중…</div> :
+           error ? <div className="error">{error}</div> :
+           !isDangerMode ? (
+            <>
+              <div className="control-board">
+                <ConveyorMode
+                  operationMode={operationMode}
+                  loading={loading}
+                  onStartAutomatic={() => handleControl('start_automatic')}
+                  onStartMaintenance={() => handleControl('start_maintenance')}
+                  onStop={() => handleControl('stop')}
+                  onDangerMode={enterDangerMode}
+                />
+              </div>
+              <div className="log-board">
+                <VideoLogTable logs={logs} activeId={activeId} onSelect={setActiveId} />
+              </div>
+            </>
+          ) : (
+            <ZoneConfigPanel
+              zones={zones}
+              selected={selectedZoneId}
+              onSelect={setSelectedZoneId}
+              currentAction={configAction}
+              onActionSelect={setConfigAction}
+              newZoneName={newZoneName}
+              onNameChange={setNewZoneName}
+              onDelete={handleDeleteZone}
+              onCancel={exitDangerMode}
+            />
+          )}
+        </div>
+
+        {/* 스트림 패널 (우측) */}
+        <div className="stream-panel">
           <div className="live-stream-wrapper">
             {isDangerMode && (configAction === 'create' || configAction === 'update') ? (
               <DangerZoneSelector
@@ -122,37 +157,6 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-        </div>
-
-        {/* 오른쪽 패널 */}
-        <div className="right-panel">
-          {loading ? <div className="loading">로딩 중…</div> :
-           error ? <div className="error">{error}</div> :
-           !isDangerMode ? (
-            <>
-              <VideoLogTable logs={logs} activeId={activeId} onSelect={setActiveId} />
-              <ConveyorMode
-                operationMode={operationMode}
-                loading={loading}
-                onStartAutomatic={() => handleControl('start_automatic')}
-                onStartMaintenance={() => handleControl('start_maintenance')}
-                onStop={() => handleControl('stop')}
-                onDangerMode={enterDangerMode}
-              />
-            </>
-          ) : (
-            <ZoneConfigPanel
-              zones={zones}
-              selected={selectedZoneId}
-              onSelect={setSelectedZoneId}
-              currentAction={configAction}
-              onActionSelect={setConfigAction}
-              newZoneName={newZoneName}
-              onNameChange={setNewZoneName}
-              onDelete={handleDeleteZone}
-              onCancel={exitDangerMode}
-            />
-          )}
         </div>
       </div>
 

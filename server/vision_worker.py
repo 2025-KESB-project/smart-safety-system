@@ -203,7 +203,8 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                         event_data = {
                             "event_type": action_type,
                             "details": {"description": description},
-                            "log_risk_level": log_risk_level
+                            "log_risk_level": log_risk_level,
+                            "operation_mode": current_mode  # 현재 동작 모드 추가
                         }
                         log_queue.put({"type": "LOG", "data": event_data})
                     
