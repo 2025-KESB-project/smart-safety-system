@@ -3,6 +3,8 @@ import cv2
 import time
 import sys
 from pathlib import Path
+
+import numpy as np
 from loguru import logger
 from multiprocessing import Queue
 import torch
@@ -64,9 +66,29 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
     config = get_config()
     try:
         input_adapter, detector, control_facade, state_manager, logic_facade = initialize_components(config)
+
+        # --- 워밍업 단계 시작 ---
+        logger.info("모델 워밍업을 시작합니다... (초기 지연을 줄이기 위한 과정)")
+        warmup_start_time = time.perf_counter()
+        # 실제 프레임과 유사한 크기의 가짜 이미지 생성 (예: 640x480)
+        # 설정 파일에서 해상도를 가져오는 것이 더 좋지만, 여기서는 일반적인 크기를 사용합니다.
+        h, w = config.get("input", {}).get("height", 480), config.get("input", {}).get("width", 640)
+        fake_frame = np.zeros((h, w, 3), dtype=np.uint8)
+        
+        # 여러 시나리오를 가정하여 모델을 미리 호출
+        # 1. 아무것도 없는 프레임
+        detector.detect(fake_frame)
+        # 2. 가짜 사람이 있는 프레임 (detector 내부의 pose_detector까지 활성화하기 위함)
+        fake_persons = [{'bbox': [10, 10, 100, 200], 'confidence': 0.9, 'class_id': 0}]
+        detector.pose_detector.detect(fake_frame, fake_persons)
+        
+        warmup_end_time = time.perf_counter()
+        logger.info(f"모델 워밍업 완료. 소요 시간: {(warmup_end_time - warmup_start_time) * 1000:.2f}ms")
+        # --- 워밍업 단계 종료 ---
+
     except Exception as e:
-        logger.critical(f"컴포넌트 초기화 중 심각한 오류 발생: {e}", exc_info=True)
-        log_queue.put({"type": "LOG", "data": {"event_type": "LOG_SYSTEM_ERROR", "details": {"message": f"Worker initialization failed: {e}"}, "log_level": "CRITICAL"}})
+        logger.critical(f"컴포넌트 초기화 또는 워밍업 중 심각한 오류 발생: {e}", exc_info=True)
+        log_queue.put({"type": "LOG", "data": {"event_type": "LOG_SYSTEM_ERROR", "details": {"message": f"Worker initialization or warmup failed: {e}"}, "log_level": "CRITICAL"}})
         return
 
     # 최초 실행 시 컨베이어 전원을 끄고 시스템 상태를 기록합니다.
