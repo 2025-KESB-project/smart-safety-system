@@ -13,7 +13,7 @@ def get_config() -> Dict[str, Any]:
     """
     config = {
         "input": {
-            "camera_index": 3,  # 실제 사용할 카메라 인덱스
+            "camera_index": 0,  # 실제 사용할 카메라 인덱스
             "mock_mode": False # True일 경우, 실제 카메라 대신 비디오 파일을 사용
         },
         "detection": {
