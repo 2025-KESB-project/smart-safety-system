@@ -137,7 +137,7 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
             display_frame = raw_frame.copy()
             loop = asyncio.get_running_loop()
 
-            # 3. 시스템 활성화 상태일 때만 안전 로직 및 시각화 수행
+            # 3. 시스템 활성화 상태였을 때만 안전 로직 및 시각화 수행
             logic_start_time = time.perf_counter()
             if state_manager.is_active():
                 sensor_data = input_adapter.get_sensor_data()
@@ -243,9 +243,15 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                 cv2.putText(display_frame, status_text, (15, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
                 cv2.putText(display_frame, risk_text, (15, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, risk_color, 2)
             
-            else:
+            else: # state_manager.is_active()가 False일 때
+                # 시스템이 비활성화되었을 때, 컨베이어 전원이 켜져 있다면 끈다.
+                physical_status = control_facade.get_all_statuses()
+                if physical_status.get("conveyor_is_on", False):
+                    logger.info("시스템 비활성 상태 확인: 컨베이어 전원을 차단합니다.")
+                    control_facade.execute_actions([{"type": "POWER_OFF", "details": {"reason": "System inactive"}}])
+                
                 cv2.putText(display_frame, "SYSTEM INACTIVE", (15, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.1)
 
             # 4. 처리된 프레임을 FastAPI 서버로 전송
             queue_put_start_time = time.perf_counter()
