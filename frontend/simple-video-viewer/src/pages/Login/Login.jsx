@@ -1,5 +1,7 @@
+// src/pages/Login/Login.jsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import "./Login.css";
 import bgImg from "../../assets/login_bg.jpg";
 
@@ -22,7 +24,6 @@ function Login() {
 
   // 로그인
   const handleLogin = () => {
-    // 👉 계정이 만들어졌는지, 그리고 입력값이 일치하는지 검사
     if (!createdEmail || !createdPw) {
       alert("먼저 계정을 생성해 주세요!");
       return;
@@ -30,7 +31,7 @@ function Login() {
 
     if (email === createdEmail && pw === createdPw) {
       alert("✅ 로그인 성공!");
-      navigate("/dashboard"); // 대시보드로 이동
+      navigate("/dashboard");
     } else {
       alert("❌ 이메일 또는 비밀번호가 일치하지 않습니다.");
     }
@@ -39,18 +40,12 @@ function Login() {
   // 계정 생성
   const handleCreateAccount = () => {
     if (tempEmail.trim() && tempPw.trim()) {
-      // 계정 등록
       setCreatedEmail(tempEmail);
       setCreatedPw(tempPw);
-
-      // 로그인 창에 자동 입력
       setEmail(tempEmail);
       setPw(tempPw);
-
       alert("✅ 계정이 생성되었습니다!");
       setShowSignup(false);
-
-      // 입력값 초기화
       setTempEmail("");
       setTempUsername("");
       setTempPw("");
@@ -65,10 +60,13 @@ function Login() {
       style={{ backgroundImage: `url(${bgImg})` }}
     >
       <div className="login-card">
-        <div className="login-triangle"></div>
+        <div className="login-triangle" />
         <h1>Safe Guard-4</h1>
         <h2>Login</h2>
-        <button className="signup-btn" onClick={() => setShowSignup(true)}>
+        <button
+          className="signup-btn"
+          onClick={() => setShowSignup(true)}
+        >
           sign up
         </button>
 
@@ -85,8 +83,20 @@ function Login() {
           onChange={(e) => setPw(e.target.value)}
         />
 
-        <button className="login-btn" onClick={handleLogin}>
+        <button
+          className="login-btn"
+          onClick={handleLogin}
+        >
           login
+        </button>
+
+        {/* 인트로 페이지로 돌아가기 버튼 */}
+        <button
+          className="intro-btn"
+          onClick={() => navigate("/intro")}
+        >
+          <ArrowLeft size={16} />
+          인트로 돌아가기
         </button>
       </div>
 
@@ -114,10 +124,16 @@ function Login() {
               onChange={(e) => setTempPw(e.target.value)}
             />
             <div className="signup-buttons">
-              <button className="cancel" onClick={() => setShowSignup(false)}>
+              <button
+                className="cancel"
+                onClick={() => setShowSignup(false)}
+              >
                 취소
               </button>
-              <button className="create" onClick={handleCreateAccount}>
+              <button
+                className="create"
+                onClick={handleCreateAccount}
+              >
                 계정 생성
               </button>
             </div>

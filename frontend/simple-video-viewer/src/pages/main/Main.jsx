@@ -19,9 +19,9 @@ function Main() {
     <>
       {showIntro ? (
         <div className="intro">
-          <h1 className="intro-title">SafeGuard-4</h1>
+          <h1 className="intro-title">Conveyor Guard</h1>
           <div className="line"></div>
-          <p className="intro-subtitle">Welcome to SafeGuard-4</p>
+          <p className="intro-subtitle">Welcome to Conveyor Guard</p>
         </div>
       ) : (
         <div
@@ -34,7 +34,7 @@ function Main() {
           }}
         >
           <h1 className="main-title">Conveyor Guard</h1>
-          <p className="main-subtitle">당신의 안전을 지켜드립니다.</p>
+          <p className="main-subtitle">28일 후가 당신의 안전을 지켜드립니다.</p>
           <div className="card-container">
             
             {/* ✅ 첫 번째 카드 → 설명 페이지로 이동 */}

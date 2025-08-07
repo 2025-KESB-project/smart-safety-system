@@ -12,17 +12,20 @@ class ConnectionManager:
 
     async def connect(self, websocket: Any): # websocket: WebSocket
         """새로운 클라이언트 연결을 수락합니다."""
-        await websocket.accept()
         self.active_connections.append(websocket)
-        logger.info(f"새로운 클라이언트 연결: {websocket.client}. 총 {len(self.active_connections)}명 접속 중.")
+        logger.info(f"Client added: {websocket.client}. Total: {len(self.active_connections)}.")
 
     def disconnect(self, websocket: Any): # websocket: WebSocket
         """클라이언트 연결을 종료합니다."""
-        self.active_connections.remove(websocket)
-        logger.info(f"클라이언트 연결 해제: {websocket.client}. 총 {len(self.active_connections)}명 접속 중.")
+        try:
+            self.active_connections.remove(websocket)
+            logger.info(f"Client removed: {websocket.client}. Total: {len(self.active_connections)}.")
+        except ValueError:
+            logger.warning(f"Attempted to remove a client that was not in the list: {websocket.client}")
 
     async def broadcast(self, message: Dict[str, Any]):
         """연결된 모든 클라이언트에게 메시지를 브로드캐스트합니다."""
+        logger.info(f"Broadcasting message to {len(self.active_connections)} client(s): {message.get('event_type')}")
         for connection in self.active_connections:
             await connection.send_json(message)
 

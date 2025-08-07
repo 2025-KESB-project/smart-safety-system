@@ -23,6 +23,13 @@ class SystemStatusResponse(BaseModel):
     database_service: ServiceStatus = Field(..., description="데이터베이스 서비스의 상태")
     background_worker_alive: bool = Field(..., description="백그라운드 워커 스레드의 활성화 여부")
 
+class LogicalStatusResponse(BaseModel):
+    """물리적 상태를 제외한 논리적 시스템 상태 응답 모델"""
+    system_is_active: bool = Field(..., description="시스템의 논리적 활성화 여부")
+    operation_mode: Optional[str] = Field(None, description="현재 작업 모드 (AUTOMATIC, MAINTENANCE)")
+    database_service: ServiceStatus = Field(..., description="데이터베이스 서비스의 상태")
+    background_worker_alive: bool = Field(..., description="백그라운드 워커 스레드의 활성화 여부")
+
     class Config:
         # FastAPI 문서에 보여줄 예시 데이터
         json_schema_extra = {

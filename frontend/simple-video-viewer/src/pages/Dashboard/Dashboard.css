@@ -108,6 +108,13 @@ html, body {
   object-fit: cover;
 }
 
+.live-stream-wrapper .dz-wrapper .dz-canvas {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100%;
+  height: 100%;
+}
+
 /* 2) 일반 스트림 모드의 live-stream-container & video */
 .live-stream-wrapper .live-stream-container {
   position: absolute;
@@ -186,16 +193,19 @@ html, body {
 
 /* 하단 생성/업데이트 완료 버튼 */
 .confirm-btn {
-  position: absolute;
-  bottom: 20px; right: 20px;
-  z-index: 1002;
   background: #e74c3c;
   color: #fff;
   border: none;
-  padding: 10px 16px;
+  padding: 12px 20px;
   border-radius: 6px;
   font-size: 14px;
   cursor: pointer;
+  font-weight: bold;
+  transition: background 0.2s;
+}
+
+.confirm-btn:hover {
+  background: #c0392b;
 }
 
 /* 로그아웃 모달 */
@@ -242,6 +252,46 @@ html, body {
   color: #000;
 }
 
+/* 위험 구역 입력 컨테이너 */
+.zone-input-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 0 6px rgba(0,0,0,0.1);
+  margin-top: 16px;
+}
+
+/* 위험 구역 이름 입력 */
+.zone-name-input {
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+/* src/pages/Dashboard/Dashboard.css */
+
+.right-panel {
+  flex: none;
+  width: 500px;
+  display: flex;
+  flex-direction: column;
+
+  /* 추가: 부모 컨테이너(main-layout)에서 남은 높이 채우기 */
+  height: 100%;
+
+  /* 추가: 내부 스크롤 제어 */
+  overflow: hidden;
+    min-height: 0;
+}
+.log-board {
+  display: flex;
+  flex-direction: column;
+}
 /* 위험 구역 이름 입력 */
 .zone-name-input {
   width: 100%;
@@ -330,4 +380,57 @@ html, body {
 .table-wrapper {
   flex: 1 1 auto;
   overflow-y: auto;
+}
+/* 팝업 오버레이: 화면 전체 중앙 고정, 반투명 백그라운드 */
+.error-popup-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.4);
+  z-index: 9999;
+}
+
+/* 팝업 컨테이너 */
+.error-popup {
+  background: #fff;
+  border-radius: 10px;
+  overflow: hidden;
+  max-width: 480px;
+  width: 95%;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* 헤더: 레드 배경, 텍스트 중앙 정렬, 닫기 버튼 위치 */
+.error-popup-header {
+  position: relative;
+  background: #e74c3c;
+  color: #fff;
+  text-align: center;
+  padding: 20px 100px 20px;
+  font-size: 30px;
+  font-weight: bold;
+}
+.error-popup-header button {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  font-size: 60px;
+  color: #fff;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* 팝업 본문: 화이트 배경, 다크 텍스트 */
+.error-popup-content {
+  background: #fff;
+  color: #333;
+  padding: 20px 100px 20px;
+  font-size: 20px;
+  line-height: 1.5;
+  white-space: pre-wrap;
 }

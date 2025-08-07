@@ -12,8 +12,8 @@ class RuleEngine:
         RuleEngine을 초기화합니다.
         """
         self.config = config or {}
-        self.last_logged_state = None # 마지막으로 로깅한 상태를 저장
-        logger.info("RuleEngine 초기화 완료. (사실 기반)")
+        self.last_system_state = None # 마지막으로 결정된 시스템 상태를 저장
+        logger.info("RuleEngine 초기화 완료. (상태 기반)")
 
     def decide_actions(self, mode: str, risk_analysis: Dict[str, Any], conveyor_is_on: bool, current_speed_percent: int) -> List[Dict[str, Any]]:
         """
@@ -87,37 +87,14 @@ class RuleEngine:
                 
                 log_action = {"type": "LOG_NORMAL_OPERATION", "details": {}}
 
-        # --- 로깅 및 UI 알림 처리 ---
-        
-        # 1. 상태가 변경되었을 때만 로그 액션을 추가
-        factor_types = sorted([f["type"] for f in risk_factors])
-        #AUTOMATIC-ZONE_INTRUSION 예시
-        current_state = f"{mode}-{','.join(factor_types)}"
-        if current_state != self.last_logged_state and log_action:
-            actions.append(log_action)
-            self.last_logged_state = current_state
+        # --- 로깅 처리 ---
+        # 1. 결정된 시스템 상태(log_action)가 이전 상태와 다를 경우에만 로그 액션을 추가합니다.
+        #    이를 통해 동일한 상태 로그가 반복적으로 쌓이는 것을 방지합니다.
+        current_system_state = log_action['type'] if log_action else "NO_ACTION"
 
-        # 2. 위험 상황에 대해 UI 알림 (중복 알림 방지 필요 시 추가 로직 구현)
-        if risk_factors:
-            # UI에 보낼 가장 중요한 알림 하나를 선택 (예: 넘어짐/센서 > 침입 > 웅크림)
-            level = "safe"
-            message = ""
-            if is_falling:
-                level, message = "critical", "넘어짐 감지! 즉시 정지합니다."
-            elif has_sensor_alert:
-                level, message = "critical", "비상 센서 감지! 즉시 정지합니다."
-            elif has_intrusion:
-                level, message = "high", "위험 구역 침입 감지!"
-            elif is_crouching:
-                level, message = "medium", "웅크린 자세 감지. 주의가 필요합니다."
-
-            if level != "safe":
-                notification_details = {
-                    "type": "SYSTEM_ALERT",
-                    "level": level,
-                    "message": message,
-                    "timestamp": datetime.now().isoformat()
-                }
-                actions.append({"type": "NOTIFY_UI", "details": notification_details})
+        if current_system_state != self.last_system_state:
+            if log_action:
+                actions.append(log_action)
+            self.last_system_state = current_system_state
 
         return actions

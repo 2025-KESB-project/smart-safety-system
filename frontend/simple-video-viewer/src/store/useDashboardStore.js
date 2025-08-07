@@ -1,0 +1,264 @@
+import { create } from 'zustand';
+import { logAPI, zoneAPI, controlAPI } from '../services/api';
+
+const useDashboardStore = create((set, get) => ({
+  // 1. 상태 (State)
+  logs: [],
+  zones: [],
+  operationMode: null,
+  loading: false,
+  error: null,
+  popupError: null,
+  globalAlert: null, // 긴급 알림용 상태
+
+  // --- UI 상태 ---
+  activeId: null,
+  isDangerMode: false,
+  configAction: null,
+  selectedZoneId: null,
+  newZoneName: '',
+  imageSize: null,
+  
+  wsStatus: 'connecting',
+  currentTime: '',
+  
+  // 2. 액션 (Actions)
+
+  initialize: async () => {
+    get().connect();
+    get().startTimer();
+    await get().fetchLogs(true);
+    await get().fetchZones();
+  },
+
+  connect: () => {
+    const socket = new WebSocket('ws://localhost:8000/ws/logs');
+
+    socket.onopen = () => {
+      set({ wsStatus: 'open' });
+    };
+
+    socket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message && message.event_type) {
+          get().addLog(message);
+        }
+      } catch (e) {
+        console.error("WebSocket 메시지 처리 오류:", e);
+      }
+    };
+
+    socket.onerror = (error) => {
+      console.error("❌ WebSocket 오류 발생:", error);
+      set({ wsStatus: 'error' });
+    };
+
+    socket.onclose = () => {
+      set({ wsStatus: 'closed' });
+    };
+  },
+
+  startTimer: () => {
+    setInterval(() => {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const date = String(now.getDate()).padStart(2, '0');
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const day = dayNames[now.getDay()];
+      let h = now.getHours();
+      const m = String(now.getMinutes()).padStart(2, '0');
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      if (h > 12) h -= 12;
+      if (h === 0) h = 12;
+      set({ currentTime: `${year}-${month}-${date} (${day}) / ${ampm}-${h}:${m}` });
+    }, 1000);
+  },
+
+  /**
+   * API에서 초기 로그 데이터를 가져옵니다.
+   * @param {boolean} showLoading - 로딩 인디케이터 표시 여부
+   */
+  fetchLogs: async (showLoading = false) => {
+    if (showLoading) set({ loading: true });
+    set({ error: null });
+    try {
+      const data = await logAPI.getLogs();
+      set({ logs: data });
+    } catch (e) {
+      console.error(e);
+      set({ error: '로그를 불러오는 중 오류가 발생했습니다.' });
+    } finally {
+      if (showLoading) set({ loading: false });
+    }
+  },
+
+  /**
+   * API에서 위험 구역 목록을 가져옵니다.
+   */
+  fetchZones: async () => {
+    try {
+      const data = await zoneAPI.getZones();
+      set({ zones: data });
+    } catch (e) {
+      console.error('구역 조회 실패', e);
+      // 구역 조회 실패는 팝업보다는 콘솔 에러로 처리
+    }
+  },
+
+  /**
+   * 새로운 로그를 실시간으로 추가합니다. (웹소켓용)
+   * @param {object} newLog - 웹소켓으로 수신된 새로운 로그 객체
+   */
+  addLog: (newLog) => {
+    // 1. 항상 로그 목록에는 추가합니다.
+    set(state => ({ logs: [newLog, ...state.logs] }));
+
+    // 2. 위험 등급을 확인하여 긴급 알림을 설정합니다.
+    const riskLevel = newLog?.log_risk_level;
+    if (riskLevel === 'CRITICAL' || riskLevel === 'HIGH') {
+      set({ globalAlert: newLog });
+
+      // 10초 후에 알림을 자동으로 닫습니다.
+      setTimeout(() => {
+        // 현재 알림이 방금 설정한 알림과 동일할 때만 닫습니다.
+        // (그 사이에 새로운 알림이 떴을 경우를 대비)
+        if (get().globalAlert?.id === newLog.id) {
+          set({ globalAlert: null });
+        }
+      }, 10000);
+    }
+  },
+  setActiveId: (id) => set({ activeId: id }),
+
+  /**
+   * 에러 팝업 메시지를 설정하고, 5초 후에 자동으로 지웁니다.
+   * @param {string} message - 표시할 에러 메시지
+   */
+  setPopupError: (message) => {
+    set({ popupError: message });
+    setTimeout(() => set({ popupError: null }), 5000);
+  },
+
+  /**
+   * 컨베이어 제어 명령을 서버에 전송합니다.
+   * @param {'start_automatic' | 'start_maintenance' | 'stop'} controlType - 제어 종류
+   */
+  handleControl: async (controlType, confirmed = false) => {
+    set({ loading: true });
+    try {
+      let response;
+      if (controlType === 'start_automatic') {
+        response = await controlAPI.startAutomaticMode(confirmed);
+      } else if (controlType === 'start_maintenance') {
+        response = await controlAPI.startMaintenanceMode();
+      } else if (controlType === 'stop') {
+        response = await controlAPI.stopSystem();
+      }
+
+      if (response.confirmation_required) {
+        if (window.confirm(response.message)) {
+          await get().handleControl(controlType, true); // 재귀 호출 with confirmation
+        }
+        return; // 여기서 처리를 중단하고 사용자 확인을 기다립니다.
+      }
+
+      set({ operationMode: response.operation_mode });
+    } catch (e) {
+      console.error(e);
+      const errorDetail = e.response?.data?.detail || e.message;
+      get().setPopupError(`명령 실행 중 오류: ${errorDetail}`);
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  // --- 위험 구역 관리 모드 ---
+  enterDangerMode: () => set({ isDangerMode: true, configAction: 'view' }),
+  exitDangerMode: () => set({ isDangerMode: false, configAction: null, selectedZoneId: null, newZoneName: '' }),
+  setConfigAction: (action) => set({ configAction: action }),
+  setSelectedZoneId: (id) => set({ selectedZoneId: id }),
+  setNewZoneName: (name) => set({ newZoneName: name }),
+  setImageSize: (size) => set({ imageSize: size }),
+
+  // --- 위험 구역 CRUD 액션 ---
+  handleCreateZone: async (ratioPoints) => {
+    const { newZoneName, imageSize } = get();
+    const name = newZoneName.trim() || `Zone ${Date.now()}`;
+    const points = ratioPoints.map(r => ({
+      x: Math.round(r.x * (imageSize?.naturalWidth || 1)),
+      y: Math.round(r.y * (imageSize?.naturalHeight || 1)),
+    }));
+
+    // 백엔드에 보낼 데이터 객체 생성 (id 포함)
+    const newZoneData = {
+      id: `zone_${Date.now()}`, // 프론트에서 고유 ID 생성
+      name,
+      points,
+    };
+
+    try {
+      await zoneAPI.createZone(newZoneData);
+      await get().fetchZones(); // 목록 새로고침
+      get().exitDangerMode();
+    } catch (err) {
+      const errorDetail = err.response?.data?.detail || err.message;
+      // 에러 상세 정보가 객체나 배열일 경우, 읽기 좋은 JSON 문자열로 변환합니다.
+      const errorMessage = typeof errorDetail === 'object'
+        ? JSON.stringify(errorDetail, null, 2)
+        : errorDetail;
+      get().setPopupError('위험 구역 생성 실패:\n' + errorMessage);
+    }
+  },
+
+  handleUpdateZone: async (ratioPoints) => {
+    const { selectedZoneId, imageSize, zones } = get();
+    if (!selectedZoneId) return;
+
+    const existingZone = zones.find(z => z.id === selectedZoneId);
+    if (!existingZone) return;
+
+    const points = ratioPoints.map(r => ({
+      x: Math.round(r.x * (imageSize?.naturalWidth || 1)),
+      y: Math.round(r.y * (imageSize?.naturalHeight || 1)),
+    }));
+
+    try {
+      await zoneAPI.updateZone(selectedZoneId, { name: existingZone.name, points });
+      await get().fetchZones();
+      get().exitDangerMode();
+    } catch (err) {
+      const errorDetail = err.response?.data?.detail || err.message;
+      const errorMessage = typeof errorDetail === 'object'
+        ? JSON.stringify(errorDetail, null, 2)
+        : errorDetail;
+      get().setPopupError('위험 구역 업데이트 실패:\n' + errorMessage);
+    }
+  },
+
+  handleDeleteZone: async () => {
+    const { selectedZoneId, zones } = get();
+    if (!selectedZoneId) return;
+
+    const targetName = zones.find(z => z.id === selectedZoneId)?.name || '선택된 구역';
+    if (!window.confirm(`${targetName}을 삭제하시겠습니까?`)) return;
+
+    try {
+      await zoneAPI.deleteZone(selectedZoneId);
+      await get().fetchZones(); // 목록 새로고침
+      // 성공 후 상태 초기화
+      set({ isDangerMode: false, configAction: null, selectedZoneId: null });
+    } catch (err) {
+      const errorDetail = err.response?.data?.detail || err.message;
+      const errorMessage = typeof errorDetail === 'object'
+        ? JSON.stringify(errorDetail, null, 2)
+        : errorDetail;
+      get().setPopupError('위험 구역 삭제 실패:\n' + errorMessage);
+    }
+  },
+  
+  
+}));
+
+export default useDashboardStore;

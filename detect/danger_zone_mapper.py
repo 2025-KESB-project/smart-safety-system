@@ -3,99 +3,34 @@ import cv2
 import numpy as np
 from typing import List, Dict, Any, Tuple
 from loguru import logger
-
-# 의존성 주입을 위해 ZoneService를 import 합니다.
-# 실제 애플리케이션에서는 FastAPI의 Depends 등을 통해 주입받게 됩니다.
-from server.services.zone_service import ZoneService
-
-import cv2
-import numpy as np
-from typing import List, Dict, Any, Tuple
-from loguru import logger
 import threading
 
 class DangerZoneMapper:
     """다각형 위험 구역을 설정하고, 사람의 침입 여부를 정교하게 판단합니다.
-       Firestore의 on_snapshot 리스너를 통해 위험 구역을 실시간으로 업데이트합니다.
+       이 클래스는 외부로부터 구역 데이터를 수동적으로 받아 업데이트됩니다.
     """
 
-    def __init__(self, zone_service: ZoneService = None):
+    def __init__(self):
         """
-        위험 구역 매퍼를 초기화하고, DB로부터 초기 데이터를 로드한 후,
-        실시간 변경 감지를 위한 리스너를 등록합니다.
-
-        Args:
-            zone_service: Firestore와 통신하는 ZoneService 인스턴스
+        위험 구역 매퍼를 초기화합니다.
         """
         self.danger_zones = []
         self._lock = threading.Lock()  # 스레드 안전성을 위한 잠금 장치
-        self.zone_service = zone_service
+        logger.info("DangerZoneMapper 초기화 완료. (수동 업데이트 모드)")
 
-        if self.zone_service:
-            # 1. 초기 데이터 로드 (기존 방식 유지)
-            self.load_zones_from_db()
-            
-            # 2. 실시간 업데이트를 위한 리스너 등록
-            self.zone_service.register_listener(self._on_snapshot_callback)
-        else:
-            logger.warning("ZoneService가 제공되지 않아 위험 구역을 로드하거나 실시간 업데이트를 할 수 없습니다.")
+    
 
-    def _on_snapshot_callback(self, doc_snapshot, changes, read_time):
-        """Firestore on_snapshot 이벤트 발생 시 호출되는 콜백 함수입니다."""
-        logger.info(f"실시간 변경 감지: {len(doc_snapshot)}개의 위험 구역 데이터로 업데이트합니다.")
-        
+    def update_zones_from_data(self, zones_data: List[Dict[str, Any]]):
+        """외부에서 받은 데이터로 메모리의 위험 구역을 전체 업데이트합니다."""
+        logger.info(f"DangerZoneMapper를 외부 데이터로 업데이트합니다. {len(zones_data)}개의 구역을 로드합니다.")
         new_zones = []
-        for doc in doc_snapshot:
-            try:
-                zone_data = doc.to_dict()
-                zone_id = doc.id
-                zone_name = zone_data.get('name', 'Unknown Zone')
-                points_list = [[p['x'], p['y']] for p in zone_data['points']]
-                points = np.array(points_list, dtype=np.int32)
-                iou_threshold = zone_data.get('iou_threshold', 0.2)
-
-                if points.size == 0:
-                    continue
-
-                new_zones.append({
-                    "id": zone_id,
-                    "name": zone_name,
-                    "points": points,
-                    "iou_threshold": iou_threshold,
-                    "bounding_rect": cv2.boundingRect(points)
-                })
-            except (KeyError, TypeError) as e:
-                logger.error(f"실시간으로 받은 위험 구역 데이터 처리 중 오류: {e}")
-
+        for zone_data in zones_data:
+            # add_zone 메소드를 재활용하여 파싱 및 추가 로직을 수행합니다.
+            self.add_zone(zone_data, target_list=new_zones)
+        
         with self._lock:
             self.danger_zones = new_zones
-
-    def load_zones_from_db(self):
-        """Firestore DB로부터 위험 구역들을 수동으로 불러옵니다."""
-        if not self.zone_service:
-            logger.error("ZoneService가 없어 DB에서 구역 정보를 가져올 수 없습니다.")
-            return
-        
-        try:
-            zones_data = self.zone_service.get_all_zones()
-            if not zones_data:
-                logger.warning("DB에 설정된 위험 구역이 없습니다.")
-                with self._lock:
-                    self.danger_zones = []
-                return
-
-            # 메모리의 구역 정보 업데이트
-            new_zones = []
-            for zone_data in zones_data:
-                self.add_zone(zone_data, new_zones)
-            
-            with self._lock:
-                self.danger_zones = new_zones
-            
-            logger.info(f"DB에서 {len(self.danger_zones)}개의 위험 구역을 성공적으로 로드했습니다.")
-
-        except Exception as e:
-            logger.error(f"DB에서 위험 구역 로드 중 심각한 오류 발생: {e}")
+        logger.success(f"DangerZoneMapper가 {len(self.danger_zones)}개의 위험 구역으로 업데이트되었습니다.")
 
     def add_zone(self, zone_data: Dict[str, Any], target_list: List = None):
         """메모리에 위험 구역을 추가합니다. (DB 저장 X)
@@ -133,6 +68,7 @@ class DangerZoneMapper:
     def check_person_in_zone(self, person_bbox: List[int], zone: Dict[str, Any]) -> Tuple[bool, float]:
         """
         사람이 위험 구역에 있는지 하이브리드 방식으로 정교하게 판단합니다.
+        0. (신규) 바운딩 박스 교차 검사로 대부분의 케이스를 빠르게 필터링합니다.
         1. 주요 포인트 검사로 대부분의 케이스를 빠르게 판단합니다.
         2. 포인트 검사에서 놓치는 특수한 경우(작은 구역에 큰 객체)를 위해 IoU를 계산하여 보완합니다.
 
@@ -144,6 +80,13 @@ class DangerZoneMapper:
             (침입 여부, 신뢰도(IoU 또는 1.0))
         """
         px1, py1, px2, py2 = person_bbox
+        zx, zy, zw, zh = zone['bounding_rect']
+
+        # --- 0단계: 빠른 바운딩 박스 교차 검사 (성능 최적화) ---
+        # 두 사각형이 겹치지 않으면, 절대 침입할 수 없으므로 즉시 종료
+        if px2 < zx or px1 > zx + zw or py2 < zy or py1 > zy + zh:
+            return False, 0.0
+
         person_rect_points = np.array([[px1, py1], [px2, py1], [px2, py2], [px1, py2]], dtype=np.int32)
 
         # --- 1단계: 빠른 포인트 검사 ---

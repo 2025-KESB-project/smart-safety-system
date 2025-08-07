@@ -3,13 +3,15 @@ import time
 from typing import Dict, Optional
 from enum import Enum
 
-from control.serial_communicator import SerialCommunicator
+from core.serial_communicator import SerialCommunicator
+
 
 class SpeedState(Enum):
     """속도 상태"""
     FULL = "full"
     HALF = "half"
     STOP = "stop"
+
 
 class SpeedController:
     """속도 제어 시스템 (아두이노 연동)"""
@@ -26,7 +28,7 @@ class SpeedController:
         self.current_state = SpeedState.FULL
         self.speed_history = []
         self.max_history_size = 100
-        
+
         logger.info(f"속도 제어기 초기화 완료. SerialCommunicator 사용. 모의 모드: {self.mock_mode}")
 
     def set_speed(self, percent: int, reason: str = "Manual control") -> bool:
@@ -45,7 +47,7 @@ class SpeedController:
 
         previous_speed = self.current_speed_percent
         self.current_speed_percent = percent
-        
+
         if percent == 0:
             self.current_state = SpeedState.STOP
         elif percent <= 50:
@@ -105,7 +107,8 @@ class SpeedController:
             'current_state': self.current_state.value,
             'mock_mode': self.mock_mode,
             'port': self.communicator.port if self.communicator else None,
-            'is_connected': (self.communicator.serial.is_open if self.communicator and self.communicator.serial else False),
+            'is_connected': (
+                self.communicator.serial.is_open if self.communicator and self.communicator.serial else False),
             'history_size': len(self.speed_history)
         }
 
