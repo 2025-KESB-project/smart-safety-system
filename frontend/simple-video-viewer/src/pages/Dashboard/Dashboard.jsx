@@ -56,7 +56,7 @@ export default function Dashboard() {
     initialize, setActiveId, handleControl, 
     enterDangerMode, exitDangerMode, setConfigAction, setSelectedZoneId,
     setNewZoneName, setImageSize, handleCreateZone, handleUpdateZone, handleDeleteZone,
-    setPopupError
+    setPopupError, testLotoCondition // 디버깅용 액션 가져오기
   } = useDashboardStore();
 
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -151,6 +151,10 @@ export default function Dashboard() {
                 onStop={() => handleControl('stop')}
                 onDangerMode={enterDangerMode}
               />
+              {/* LOTO 테스트 버튼 임시 추가 */}
+              <button onClick={testLotoCondition} style={{marginTop: '10px', background: '#777', color: 'white', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer'}}>
+                [DEBUG] LOTO 테스트 상태 만들기
+              </button>
               <VideoLogTable 
                 className="log-board"
                 logs={logs} 
