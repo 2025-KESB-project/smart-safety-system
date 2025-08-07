@@ -118,9 +118,8 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                     state_manager.start_maintenance_mode()
                 elif cmd_type == "STOP":
                     state_manager.stop_system_globally()
-                    # 프로그램 종료 로직 추가
-                    logger.info("STOP 명령 수신, 워커를 종료합니다.")
-                    break
+                    logger.info("STOP 명령 수신, 시스템은 정지 상태로 전환됩니다. 영상 스트림은 유지됩니다.")
+                    # break # 워커를 종료하지 않고 계속 실행하여 영상 스트림 유지
                 elif cmd_type == "UPDATE_ZONES":
                     zones = command.get("data", [])
                     detector.danger_zone_mapper.update_zones_from_data(zones)

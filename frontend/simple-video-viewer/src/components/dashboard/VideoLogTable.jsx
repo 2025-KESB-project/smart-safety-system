@@ -30,9 +30,9 @@ const RISK_MAP = {
   LOG_NORMAL_OPERATION:   'status-safe',
 };
 
-export default function VideoLogTable({ logs, activeId, onSelect }) {
+export default function VideoLogTable({ className, logs, activeId, onSelect }) {
   return (
-    <div className="log-board">
+    <div className={className}> {/* 받은 className을 적용 */}
       <h3>🎞️ 영상 로그</h3>
       <div className="table-wrapper">
         <table>
@@ -59,10 +59,27 @@ export default function VideoLogTable({ logs, activeId, onSelect }) {
               const modeClassName = `mode-${(log.operation_mode || 'unknown').toLowerCase()}`;
 
               // 3) 상세 내용
-              const description = log.details?.description || EVENT_LABEL[log.event_type] || '-';
+              const description = EVENT_LABEL[log.event_type] || log.details?.description || '-';
 
-              // 4) 행 전체에 적용할 클래스
-              const rowClassName = RISK_MAP[log.event_type] || 'status-safe';
+              // 4) 아이콘 및 행 전체에 적용할 클래스
+              const getRiskInfo = (eventType) => {
+                switch (eventType) {
+                  case 'LOG_CRITICAL_FALLING':
+                  case 'LOG_CRITICAL_SENSOR':
+                    return { icon: '🔥', className: 'status-critical' };
+                  case 'LOG_INTRUSION_SLOWDOWN':
+                  case 'LOG_LOTO_ACTIVE':
+                    return { icon: '⚠️', className: 'status-high' };
+                  case 'LOG_CROUCHING_WARN':
+                    return { icon: '❗', className: 'status-medium' };
+                  case 'LOG_MAINTENANCE_SAFE':
+                  case 'LOG_NORMAL_OPERATION':
+                    return { icon: 'ℹ️', className: 'status-safe' };
+                  default:
+                    return { icon: 'ℹ️', className: 'status-safe' };
+                }
+              };
+              const { icon, className: rowClassName } = getRiskInfo(log.event_type);
 
               // 5) key
               const key = log.id ?? `${log.timestamp}-${idx}`;
@@ -77,7 +94,7 @@ export default function VideoLogTable({ logs, activeId, onSelect }) {
                 >
                   <td className="date-cell">{dateTime}</td>
                   <td className={`mode-cell ${modeClassName}`}>{modeText}</td>
-                  <td className="description-cell">{description}</td>
+                  <td className="description-cell">{icon} {description}</td>
                 </tr>
               );
             })}

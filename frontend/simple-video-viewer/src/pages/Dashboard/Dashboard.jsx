@@ -97,42 +97,7 @@ export default function Dashboard() {
 
       {/* 메인 레이아웃 */}
       <div className="main-layout">
-        {/* 제어 및 로그 패널 (좌측) */}
-        <div className="control-panel">
-          {loading ? <div className="loading">로딩 중…</div> :
-           error ? <div className="error">{error}</div> :
-           !isDangerMode ? (
-            <>
-              <div className="control-board">
-                <ConveyorMode
-                  operationMode={operationMode}
-                  loading={loading}
-                  onStartAutomatic={() => handleControl('start_automatic')}
-                  onStartMaintenance={() => handleControl('start_maintenance')}
-                  onStop={() => handleControl('stop')}
-                  onDangerMode={enterDangerMode}
-                />
-              </div>
-              <div className="log-board">
-                <VideoLogTable logs={logs} activeId={activeId} onSelect={setActiveId} />
-              </div>
-            </>
-          ) : (
-            <ZoneConfigPanel
-              zones={zones}
-              selected={selectedZoneId}
-              onSelect={setSelectedZoneId}
-              currentAction={configAction}
-              onActionSelect={setConfigAction}
-              newZoneName={newZoneName}
-              onNameChange={setNewZoneName}
-              onDelete={handleDeleteZone}
-              onCancel={exitDangerMode}
-            />
-          )}
-        </div>
-
-        {/* 스트림 패널 (우측) */}
+        {/* 스트림 패널 (좌측) */}
         <div className="stream-panel">
           <div className="live-stream-wrapper">
             {isDangerMode && (configAction === 'create' || configAction === 'update') ? (
@@ -157,6 +122,55 @@ export default function Dashboard() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* 제어 및 로그 패널 (우측) */}
+        <div className="control-panel">
+          {loading ? <div className="loading">로딩 중…</div> :
+           error ? <div className="error">{error}</div> :
+           !isDangerMode ? (
+            <>
+              {/* 긴급 대응 영역 */}
+              <div className="emergency-response-panel">
+                <button 
+                  className="emergency-stop-btn"
+                  onClick={() => handleControl('stop')} 
+                  disabled={loading} /* 로딩 중이 아닐 때는 항상 활성화 */
+                >
+                  🚨 긴급 정지
+                </button>
+              </div>
+
+              {/* 일반 제어 영역 */}
+              <ConveyorMode
+                className="control-board"
+                operationMode={operationMode}
+                loading={loading}
+                onStartAutomatic={() => handleControl('start_automatic')}
+                onStartMaintenance={() => handleControl('start_maintenance')}
+                onStop={() => handleControl('stop')}
+                onDangerMode={enterDangerMode}
+              />
+              <VideoLogTable 
+                className="log-board"
+                logs={logs} 
+                activeId={activeId} 
+                onSelect={setActiveId} 
+              />
+            </>
+          ) : (
+            <ZoneConfigPanel
+              zones={zones}
+              selected={selectedZoneId}
+              onSelect={setSelectedZoneId}
+              currentAction={configAction}
+              onActionSelect={setConfigAction}
+              newZoneName={newZoneName}
+              onNameChange={setNewZoneName}
+              onDelete={handleDeleteZone}
+              onCancel={exitDangerMode}
+            />
+          )}
         </div>
       </div>
 
