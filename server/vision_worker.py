@@ -84,6 +84,8 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
     while True:
         try:
             # 1. FastAPI 서버로부터 명령 수신 및 처리
+            loop_start_time = time.perf_counter()
+
             if not command_queue.empty():
                 command = command_queue.get_nowait()
                 logger.info(f"FastAPI 서버로부터 명령 수신: {command}")
@@ -103,7 +105,10 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                     logger.info(f"Vision Worker의 Zone 정보가 {len(zones)}개로 업데이트되었습니다.")
 
             # 2. 영상 프레임 획득
+            capture_start_time = time.perf_counter()
             raw_frame = input_adapter.get_frame()
+            capture_end_time = time.perf_counter()
+
             if raw_frame is None:
                 await asyncio.sleep(0.1)
                 continue
@@ -112,11 +117,14 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
             loop = asyncio.get_running_loop()
 
             # 3. 시스템 활성화 상태일 때만 안전 로직 및 시각화 수행
+            logic_start_time = time.perf_counter()
             if state_manager.is_active():
                 sensor_data = input_adapter.get_sensor_data()
                 
                 # 객체 탐지 (CPU 집약적 작업을 별도 스레드에서 실행하여 이벤트 루프 블로킹 방지)
+                detect_start_time = time.perf_counter()
                 detection_result = await loop.run_in_executor(None, detector.detect, raw_frame)
+                detect_end_time = time.perf_counter()
 
                 # 논리적 상태는 메인 루프에서 직접 가져옴
                 current_status = state_manager.get_status()
@@ -128,6 +136,7 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                 conveyor_speed = physical_status.get("conveyor_speed", 100)
 
                 # 로직 처리
+                logic_facade_start_time = time.perf_counter()
                 actions = logic_facade.process(
                     detection_result=detection_result,
                     sensor_data=sensor_data,
@@ -135,8 +144,10 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                     current_conveyor_status=conveyor_is_on,
                     current_conveyor_speed=conveyor_speed
                 )
+                logic_facade_end_time = time.perf_counter()
 
                 # 액션 실행
+                control_start_time = time.perf_counter()
                 control_actions = []
                 for action in actions:
                     action_type = action.get("type")
@@ -179,9 +190,12 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
 
                 if control_actions:
                     control_facade.execute_actions(control_actions)
+                control_end_time = time.perf_counter()
 
                 # 시각화 및 스트리밍 프레임 업데이트
+                draw_start_time = time.perf_counter()
                 display_frame = detector.draw_detections(raw_frame, detection_result)
+                draw_end_time = time.perf_counter()
                 
                 # 최종 상태를 다시 가져와서 화면에 표시
                 logical_status = state_manager.get_status()
@@ -212,11 +226,25 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                 await asyncio.sleep(0.5)
 
             # 4. 처리된 프레임을 FastAPI 서버로 전송
+            queue_put_start_time = time.perf_counter()
             if not frame_queue.full():
                 # 프레임을 JPEG로 인코딩하여 바이트로 변환
                 _, encoded_frame = cv2.imencode('.jpg', display_frame)
                 frame_queue.put_nowait(encoded_frame.tobytes())
+            queue_put_end_time = time.perf_counter()
+
+            loop_end_time = time.perf_counter()
             
+            # --- 성능 측정 로그 ---
+            if state_manager.is_active():
+                logger.debug(f"[PERF] Capture: {((capture_end_time - capture_start_time) * 1000):.2f}ms | "
+                             f"Detect: {((detect_end_time - detect_start_time) * 1000):.2f}ms | "
+                             f"Logic: {((logic_facade_end_time - logic_facade_start_time) * 1000):.2f}ms | "
+                             f"Control: {((control_end_time - control_start_time) * 1000):.2f}ms | "
+                             f"Draw: {((draw_end_time - draw_start_time) * 1000):.2f}ms | "
+                             f"QueuePut: {((queue_put_end_time - queue_put_start_time) * 1000):.2f}ms | "
+                             f"TOTAL: {((loop_end_time - loop_start_time) * 1000):.2f}ms")
+
             await asyncio.sleep(0.01)
 
         except Exception as e:
