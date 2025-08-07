@@ -62,10 +62,17 @@ export default function Dashboard() {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const navigate = useNavigate();
 
-  // 2. 초기 데이터 로딩 및 시간 표시
+  // 2. 초기 데이터 로딩 및 WebSocket 연결, 그리고 정리
   useEffect(() => {
-    initialize(); // 스토어의 초기화 함수 호출
-  }, [initialize]);
+    // 컴포넌트가 마운트될 때 초기화 함수를 호출합니다.
+    initialize();
+
+    // 컴포넌트가 언마운트될 때 실행될 클린업 함수를 반환합니다.
+    // 이것은 StrictMode에서의 이중 호출 및 페이지 이동 시 메모리 누수를 방지합니다.
+    return () => {
+      useDashboardStore.getState().disconnect();
+    };
+  }, []); // 의존성 배열을 비워서 마운트/언마운트 시에만 실행되도록 보장
 
   return (
     <div className="dashboard">

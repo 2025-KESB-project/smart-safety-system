@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { logAPI, zoneAPI, controlAPI } from '../services/api';
 
+// WebSocket 인스턴스를 React 생명주기 외부에서 관리하여 StrictMode 중복 실행 방지
+let socketInstance = null;
+
 const useDashboardStore = create((set, get) => ({
   // 1. 상태 (State)
   logs: [],
@@ -19,7 +22,7 @@ const useDashboardStore = create((set, get) => ({
   newZoneName: '',
   imageSize: null,
   
-  wsStatus: 'connecting',
+  wsStatus: 'closed', // 초기 상태는 'closed'
   currentTime: '',
   
   // 2. 액션 (Actions)
@@ -31,16 +34,36 @@ const useDashboardStore = create((set, get) => ({
     await get().fetchZones();
   },
 
-  connect: () => {
-    const socket = new WebSocket('ws://localhost:8000/ws/logs');
+  disconnect: () => {
+    if (socketInstance) {
+      console.log("[WS] 외부 인스턴스 연결을 종료합니다.");
+      socketInstance.close(4000, "User-initiated disconnect");
+      socketInstance = null;
+    }
+    set({ wsStatus: 'closed' });
+  },
 
-    socket.onopen = () => {
+  connect: () => {
+    // React 생명주기 외부의 인스턴스를 확인하여 중복 연결을 원천적으로 차단
+    if (socketInstance) {
+      console.log("[WS] 외부 인스턴스가 이미 존재하여 연결을 중단합니다.");
+      return;
+    }
+
+    set({ wsStatus: 'connecting' });
+    console.log("[WS] 새로운 외부 인스턴스 연결을 시작합니다.");
+    socketInstance = new WebSocket('ws://localhost:8000/ws/logs');
+
+    socketInstance.onopen = () => {
+      console.log("[WS] ✅ 연결 성공!");
       set({ wsStatus: 'open' });
     };
 
-    socket.onmessage = (event) => {
+    socketInstance.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
+        // 디버깅을 위해 수신된 모든 메시지를 콘솔에 출력
+        console.log(`[WS_MESSAGE_RECEIVED] at ${new Date().toISOString()}:`, message);
         if (message && message.event_type) {
           get().addLog(message);
         }
@@ -49,12 +72,14 @@ const useDashboardStore = create((set, get) => ({
       }
     };
 
-    socket.onerror = (error) => {
+    socketInstance.onerror = (error) => {
       console.error("❌ WebSocket 오류 발생:", error);
       set({ wsStatus: 'error' });
     };
 
-    socket.onclose = () => {
+    socketInstance.onclose = (event) => {
+      console.log(`[WS] ⛔️ 연결 닫힘. Code: ${event.code}`);
+      socketInstance = null; // 인스턴스 참조 제거
       set({ wsStatus: 'closed' });
     };
   },
