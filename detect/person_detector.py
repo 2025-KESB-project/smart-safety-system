@@ -16,13 +16,16 @@ class PersonDetector:
             conf_threshold: 신뢰도 임계값
         """
         try:
-            # M1/M2 MPS(GPU) 사용 가능 여부 확인
-            if torch.backends.mps.is_available():
-                self.device = "mps"
-                logger.info("MPS (Apple Silicon GPU) 사용 가능. 장치를 'mps'로 설정합니다.")
+            # 1. 하드웨어 장치 자동 감지 (CUDA > MPS > CPU 순)
+            if torch.cuda.is_available():
+                self.device = torch.device("cuda")
+                logger.success("PersonDetector: NVIDIA GPU (CUDA)를 감지하여 사용합니다.")
+            elif torch.backends.mps.is_available():
+                self.device = torch.device("mps")
+                logger.success("PersonDetector: Apple Silicon GPU (MPS)를 감지하여 사용합니다.")
             else:
-                self.device = "cpu"
-                logger.info("MPS 사용 불가능. 장치를 'cpu'로 설정합니다.")
+                self.device = torch.device("cpu")
+                logger.warning("PersonDetector: 사용 가능한 GPU가 없어 CPU를 사용합니다.")
 
             self.model = YOLO(model_path)
             self.model.to(self.device) # 모델을 지정된 장치로 이동

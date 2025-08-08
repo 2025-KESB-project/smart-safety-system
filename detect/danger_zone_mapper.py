@@ -4,6 +4,7 @@ import numpy as np
 from typing import List, Dict, Any, Tuple
 from loguru import logger
 import threading
+from core.drawing_utils import put_text_korean
 
 class DangerZoneMapper:
     """다각형 위험 구역을 설정하고, 사람의 침입 여부를 정교하게 판단합니다.
@@ -185,7 +186,13 @@ class DangerZoneMapper:
 
             cv2.polylines(result_frame, [zone['points']], isClosed=True, color=color, thickness=thickness)
             
-            label_pos = (zone['bounding_rect'][0], zone['bounding_rect'][1] - 10)
-            cv2.putText(result_frame, zone["name"], label_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+            label_pos = (zone['bounding_rect'][0], zone['bounding_rect'][1] - 30) # 텍스트 위치를 조금 더 위로 조정
+            result_frame = put_text_korean(
+                image=result_frame,
+                text=zone["name"],
+                position=label_pos,
+                font_size=25,
+                color=color
+            )
 
         return result_frame
