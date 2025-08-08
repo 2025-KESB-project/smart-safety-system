@@ -150,9 +150,9 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                 sensor_data = input_adapter.get_sensor_data()
                 
                 # 객체 탐지 (CPU 집약적 작업을 별도 스레드에서 실행하여 이벤트 루프 블로킹 방지)
-                detect_start_time = time.perf_counter()
+                # detect_start_time = time.perf_counter()
                 detection_result = await loop.run_in_executor(None, detector.detect, raw_frame)
-                detect_end_time = time.perf_counter()
+                # detect_end_time = time.perf_counter()
 
                 # 논리적 상태는 메인 루프에서 직접 가져옴
                 current_status = state_manager.get_status()
@@ -164,7 +164,7 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                 conveyor_speed = physical_status.get("conveyor_speed", 100)
 
                 # 로직 처리
-                logic_facade_start_time = time.perf_counter()
+                # logic_facade_start_time = time.perf_counter()
                 actions = logic_facade.process(
                     detection_result=detection_result,
                     sensor_data=sensor_data,
@@ -175,7 +175,7 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                 # logic_facade_end_time = time.perf_counter()
 
                 # 액션 실행
-                control_start_time = time.perf_counter()
+                # control_start_time = time.perf_counter()
                 control_actions = []
                 for action in actions:
                     action_type = action.get("type")
