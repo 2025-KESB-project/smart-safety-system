@@ -67,13 +67,24 @@ export default function Dashboard() {
     initialize(); // 스토어의 초기화 함수 호출
   }, [initialize]);
 
+  // 3. 유저의 이름을 로컬 스토리지에서 가져옵니다.
+  const [username, setUsername] = useState('');
+  useEffect(() => {
+  const savedUsername = localStorage.getItem('username') || 'admin';
+  setUsername(savedUsername);
+  }, []);
+
   return (
     <div className="dashboard">
       {/* 헤더 */}
       <div className="header-bar">
-        <div className="logo">GUARD-4</div>
+        <div className="header-left">
+          <div className="logo">Conveyor Guard</div>
+          <div className="factory-label">경기대 가상 공장</div>
+        </div>
         <div className="right-info">
           <div className="date-time">{currentTime}</div>
+          <div className="user-label">🧑‍💻 {username}(admin)</div>
           <button className="logout-btn" onClick={() => setShowLogoutModal(true)}>
             <LogOut size={18} /> Logout
           </button>
@@ -162,7 +173,10 @@ export default function Dashboard() {
       <ErrorPopup message={popupError} onClose={() => setPopupError(null)} />
       {showLogoutModal && (
         <LogoutModal
-          onConfirm={() => navigate('/login')}
+          onConfirm={() => {
+            localStorage.clear();
+            navigate('/login');
+          }}
           onCancel={() => setShowLogoutModal(false)}
         />
       )}
