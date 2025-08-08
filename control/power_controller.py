@@ -22,7 +22,6 @@ class PowerController:
         if not self._is_power_on:
             logger.success(f"전원 공급 시작. 이유: {reason}")
             self.communicator.send_command("p1")
-            self.communicator.send_command("s255")
             self._is_power_on = True
         else:
             logger.info("이미 전원이 공급된 상태입니다.")

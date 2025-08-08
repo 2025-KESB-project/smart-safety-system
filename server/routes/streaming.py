@@ -29,15 +29,8 @@ def generate_frames(frame_queue: Queue):
     while True:
         try:
             # 큐에서 프레임을 가져오되, 최대 1초간 대기
-            get_start_time = time.perf_counter()
-            logger.debug("[Streamer] Waiting for frame from queue...")
             encoded_frame_bytes = frame_queue.get(timeout=1.0)
-            get_end_time = time.perf_counter()
             last_frame_time = time.time()
-
-            wait_time_ms = (get_end_time - get_start_time) * 1000
-            logger.debug(f"[Streamer] Frame received. Waited for {wait_time_ms:.2f}ms. Yielding to client.")
-
             yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' +
                    encoded_frame_bytes + b'\r\n')
         except Exception:
@@ -48,7 +41,6 @@ def generate_frames(frame_queue: Queue):
             yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' +
                    encoded_image.tobytes() + b'\r\n')
             time.sleep(1) # 경고 이미지 표시 후 잠시 대기
-
 
 @router.get("/video_feed", summary="실시간 영상 스트리밍")
 def video_feed(frame_queue: Queue = Depends(get_frame_queue)):

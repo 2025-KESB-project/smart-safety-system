@@ -29,38 +29,35 @@
 .log-board table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: fixed; /* 테이블 레이아웃 고정 */
+  table-layout: fixed;
 }
-
-/* 테이블 헤더 셀 */
-.log-board th {
-  padding: 12px 15px;
-  text-align: left;
-  font-weight: 600;
-  border-right: 1px solid #dee2e6; /* 옅은 회색 오른쪽 테두리 */
-}
-
-/* 테이블 바디 셀 */
-.log-board td {
-  padding: 12px 15px;
-  vertical-align: middle;
-  border-right: 1px solid #dee2e6; /* 옅은 회색 오른쪽 테두리 */
-  font-size: 14px; /* 글자 크기 축소 */
-}
-
-/* 마지막 셀은 테두리 제거 */
-.log-board th:last-child,
-.log-board td:last-child {
-  border-right: none;
-}
-
-/* 컬럼 너비 설정 */
-.log-board th:nth-child(1), .log-board .date-cell    { width: 90px; } /* 너비 조정 */
-.log-board th:nth-child(2), .log-board .mode-cell    { width: 100px; } /* 너비 복원 */
-.log-board th:nth-child(3), .log-board .description-cell { width: auto; } /* 남은 공간 모두 사용 */
-
 .log-board thead {
   background-color: #f3f4f6;
+}
+/* 2) 날짜(일시) 컬럼을 넉넉히, 줄바꿈도 허용해 줍니다 */
+.log-board th:nth-child(1),
+.log-board td.date-cell {
+  width: 220px;           /* 필요에 따라 px 값 조정하세요 */
+  white-space: normal;    /* 긴 일시는 줄바꿈 */
+}
+/* 3) 감지 인원·이유 컬럼은 auto 너비 */
+.log-board th:nth-child(2),
+.log-board td:nth-child(2),
+.log-board th:nth-child(3),
+.log-board td:nth-child(3) {
+  width: auto;
+}
+/* 4) 위험도 컬럼(색 블록)만 작게 고정 */
+.log-board th:nth-child(4),
+.log-board td.risk-cell {
+  width: 40px;            /* 블록 하나 보일 정도로만 */
+  padding: 0;             /* 여백 최소화 */
+}
+
+/* 5) overflow 처리 (필요하다면) */
+.log-board td {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .log-board tr.active {
   background-color: #e0f2fe;
@@ -89,46 +86,16 @@
   flex: 1 1 auto;
   overflow-y: auto;
 }
-/* 테이블 행 기본 스타일 */
-.log-board tbody tr {
-  transition: background-color 0.1s;
+/* tr 클래스에 따라 각 셀에 배경색을 강제 적용합니다 */
+.log-board tbody tr.status-safe td {
+  background-color: #83ff8dca !important;
 }
-
-/* 심각도: 안전 */
-.log-board tbody tr.status-safe {
-  background-color: #d4edda; /* 밝은 녹색 */
-  color: #155724; /* 어두운 녹색 텍스트 */
+.log-board tbody tr.status-medium td {
+  background-color: #e8dc4fd4 !important;
 }
-
-/* 심각도: 중간 (경고) */
-.log-board tbody tr.status-medium {
-  background-color: #fff3cd; /* 밝은 노란색 */
-  color: #856404; /* 어두운 노란색 텍스트 */
-  font-weight: 500;
+.log-board tbody tr.status-high td {
+  background-color: #ff8f4fdb !important;
 }
-
-/* 심각도: 높음 (위험) */
-.log-board tbody tr.status-high {
-  background-color: #f8d7da; /* 밝은 붉은색 */
-  color: #721c24; /* 어두운 붉은색 텍스트 */
-  font-weight: 600;
-}
-
-/* 심각도: 치명적 (긴급) */
-.log-board tbody tr.status-critical {
-  background-color: #dc3545; /* 강렬한 붉은색 */
-  color: #ffffff; /* 흰색 텍스트 */
-  font-weight: 700;
-}
-
-/* 활성화된 행 스타일 (심각도 스타일보다 우선 적용) */
-.log-board tr.active,
-.log-board tr.active td {
-  background-color: #007bff !important; /* 파란색으로 확실하게 강조 */
-  color: #fff !important;
-}
-
-/* 상세 내용 셀의 아이콘 스타일 */
-.description-cell {
-  font-size: 1.1rem; /* 아이콘이 잘 보이도록 약간 크게 */
+.log-board tbody tr.status-critical td {
+  background-color: #e53333c4 !important;
 }

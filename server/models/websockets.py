@@ -23,7 +23,6 @@ class LogMessage(BaseModel):
     """실시간 로그 스트리밍을 위한 웹소켓 메시지 모델"""
     event_type: str = Field(..., description="발생한 이벤트의 유형", examples=["LOG_HIGH_RISK"])
     risk_level: str | None = Field(None, description="관련된 위험 수준", examples=["high"])
-    operation_mode: str | None = Field(None, description="이벤트 발생 시점의 시스템 동작 모드", examples=["AUTOMATIC"])
     details: Dict[str, Any] = Field(default_factory=dict, description="이벤트 관련 상세 정보")
     timestamp: str = Field(..., description="이벤트 발생 시간 (ISO 8601 형식)", examples=["2025-07-28T15:00:00.123456"])
 

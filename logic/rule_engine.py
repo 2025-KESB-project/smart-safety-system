@@ -30,14 +30,6 @@ class RuleEngine:
         """
         actions = []
         risk_factors = risk_analysis.get("risk_factors", [])
-
-        # 규칙 -1: 시스템 정지(STOP) 모드 (모든 규칙에 우선)
-        if mode == "STOP":
-            # 현재 전원이 켜져 있을 때만 POWER_OFF 명령을 내립니다.
-            if conveyor_is_on:
-                actions.append({"type": "POWER_OFF", "details": {"reason": "system_stopped_by_user"}})
-            # 다른 모든 액션을 무시하고 즉시 반환합니다.
-            return actions
         
         # --- 위험 사실 존재 여부 확인 ---
         has_intrusion = any(f["type"] == "ZONE_INTRUSION" for f in risk_factors)
