@@ -26,6 +26,7 @@ from control.control_facade import ControlFacade
 from server.state_manager import SystemStateManager
 from server.services.zone_service import ZoneService
 from core.serial_communicator import SerialCommunicator
+from core.drawing_utils import put_text_korean
 
 # --------------------------------------------------------------------------
 # 컴포넌트 초기화 함수
@@ -106,7 +107,7 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
     while True:
         try:
             # 1. FastAPI 서버로부터 명령 수신 및 처리
-            # loop_start_time = time.perf_counter()
+            loop_start_time = time.perf_counter()
 
             if not command_queue.empty():
                 command = command_queue.get_nowait()
@@ -133,9 +134,9 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                     logger.info(f"Vision Worker의 Zone 정보가 {len(zones)}개로 업데이트되었습니다.")
 
             # 2. 영상 프레임 획득
-            # capture_start_time = time.perf_counter()
+            capture_start_time = time.perf_counter()
             raw_frame = input_adapter.get_frame()
-            # capture_end_time = time.perf_counter()
+            capture_end_time = time.perf_counter()
 
             if raw_frame is None:
                 await asyncio.sleep(0.1)
@@ -145,14 +146,14 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
             loop = asyncio.get_running_loop()
 
             # 3. 시스템 활성화 상태였을 때만 안전 로직 및 시각화 수행
-            # logic_start_time = time.perf_counter()
+            logic_start_time = time.perf_counter()
             if state_manager.is_active():
                 sensor_data = input_adapter.get_sensor_data()
                 
                 # 객체 탐지 (CPU 집약적 작업을 별도 스레드에서 실행하여 이벤트 루프 블로킹 방지)
-                # detect_start_time = time.perf_counter()
+                detect_start_time = time.perf_counter()
                 detection_result = await loop.run_in_executor(None, detector.detect, raw_frame)
-                # detect_end_time = time.perf_counter()
+                detect_end_time = time.perf_counter()
 
                 # 논리적 상태는 메인 루프에서 직접 가져옴
                 current_status = state_manager.get_status()
@@ -164,7 +165,7 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                 conveyor_speed = physical_status.get("conveyor_speed", 100)
 
                 # 로직 처리
-                # logic_facade_start_time = time.perf_counter()
+                logic_facade_start_time = time.perf_counter()
                 actions = logic_facade.process(
                     detection_result=detection_result,
                     sensor_data=sensor_data,
@@ -172,10 +173,10 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                     current_conveyor_status=conveyor_is_on,
                     current_conveyor_speed=conveyor_speed
                 )
-                # logic_facade_end_time = time.perf_counter()
+                logic_facade_end_time = time.perf_counter()
 
                 # 액션 실행
-                # control_start_time = time.perf_counter()
+                control_start_time = time.perf_counter()
                 control_actions = []
                 for action in actions:
                     action_type = action.get("type")
@@ -219,12 +220,12 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
 
                 if control_actions:
                     control_facade.execute_actions(control_actions)
-                # control_end_time = time.perf_counter()
+                control_end_time = time.perf_counter()
 
                 # 시각화 및 스트리밍 프레임 업데이트
-                # draw_start_time = time.perf_counter()
+                draw_start_time = time.perf_counter()
                 display_frame = detector.draw_detections(raw_frame, detection_result)
-                # draw_end_time = time.perf_counter()
+                draw_end_time = time.perf_counter()
                 
                 # 최종 상태를 다시 가져와서 화면에 표시
                 logical_status = state_manager.get_status()
@@ -246,9 +247,9 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                 risk_text = "Risk: DETECTED" if risk_factors else "Risk: SAFE"
                 risk_color = (0, 0, 255) if risk_factors else (0, 255, 0)
 
-                cv2.putText(display_frame, mode_text, (15, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
-                cv2.putText(display_frame, status_text, (15, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
-                cv2.putText(display_frame, risk_text, (15, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.8, risk_color, 2)
+                display_frame = put_text_korean(display_frame, mode_text, (15, 50), 22, (255, 255, 0))
+                display_frame = put_text_korean(display_frame, status_text, (15, 80), 22, (0, 255, 255))
+                display_frame = put_text_korean(display_frame, risk_text, (15, 110), 22, risk_color)
             
             else: # state_manager.is_active()가 False일 때
                 # 시스템이 비활성화되었을 때, 컨베이어 전원이 켜져 있다면 끈다.
@@ -257,28 +258,28 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                     logger.info("시스템 비활성 상태 확인: 컨베이어 전원을 차단합니다.")
                     control_facade.execute_actions([{"type": "POWER_OFF", "details": {"reason": "System inactive"}}])
                 
-                cv2.putText(display_frame, "SYSTEM INACTIVE", (15, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                display_frame = put_text_korean(display_frame, "SYSTEM INACTIVE", (15, 50), 30, (0, 0, 255))
                 await asyncio.sleep(0.1)
 
             # 4. 처리된 프레임을 FastAPI 서버로 전송
-            # queue_put_start_time = time.perf_counter()
+            queue_put_start_time = time.perf_counter()
             if not frame_queue.full():
                 # 프레임을 JPEG로 인코딩하여 바이트로 변환
                 _, encoded_frame = cv2.imencode('.jpg', display_frame)
                 frame_queue.put_nowait(encoded_frame.tobytes())
-            # queue_put_end_time = time.perf_counter()
+            queue_put_end_time = time.perf_counter()
 
-            # loop_end_time = time.perf_counter()
+            loop_end_time = time.perf_counter()
             
             # --- 성능 측정 로그 ---
-            # if state_manager.is_active():
-                # logger.debug(f"[PERF] Capture: {((capture_end_time - capture_start_time) * 1000):.2f}ms | "
-                #              f"Detect: {((detect_end_time - detect_start_time) * 1000):.2f}ms | "
-                #              f"Logic: {((logic_facade_end_time - logic_facade_start_time) * 1000):.2f}ms | "
-                #              f"Control: {((control_end_time - control_start_time) * 1000):.2f}ms | "
-                #              f"Draw: {((draw_end_time - draw_start_time) * 1000):.2f}ms | "
-                #              f"QueuePut: {((queue_put_end_time - queue_put_start_time) * 1000):.2f}ms | "
-                #              f"TOTAL: {((loop_end_time - loop_start_time) * 1000):.2f}ms")
+            if state_manager.is_active():
+                logger.debug(f"[PERF] Capture: {((capture_end_time - capture_start_time) * 1000):.2f}ms | "
+                             f"Detect: {((detect_end_time - detect_start_time) * 1000):.2f}ms | "
+                             f"Logic: {((logic_facade_end_time - logic_facade_start_time) * 1000):.2f}ms | "
+                             f"Control: {((control_end_time - control_start_time) * 1000):.2f}ms | "
+                             f"Draw: {((draw_end_time - draw_start_time) * 1000):.2f}ms | "
+                             f"QueuePut: {((queue_put_end_time - queue_put_start_time) * 1000):.2f}ms | "
+                             f"TOTAL: {((loop_end_time - loop_start_time) * 1000):.2f}ms")
 
             await asyncio.sleep(0.01)
 
