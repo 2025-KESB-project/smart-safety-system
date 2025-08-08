@@ -1,4 +1,5 @@
 export default function ConveyorMode({
+  className,
   operationMode,
   loading,
   onStartAutomatic,
@@ -15,18 +16,23 @@ export default function ConveyorMode({
   };
 
   return (
-    <div className="control-board">
+    <div className={`${className} conveyor-mode`}>
       <h3>🛠️ 컨트롤 보드</h3>
-      <button onClick={onStartAutomatic} disabled={loading || operationMode === 'AUTOMATIC'}>
+      <button 
+        onClick={onStartAutomatic} 
+        disabled={loading || operationMode === 'AUTOMATIC'}
+        className="btn-start"
+      >
         {loading && operationMode !== 'AUTOMATIC' ? "⏳ 전환 중..." : "▶️ 운전 모드 시작"}
       </button>
-      <button onClick={onStartMaintenance} disabled={loading || operationMode === 'MAINTENANCE'}>
+      <button 
+        onClick={onStartMaintenance} 
+        disabled={loading || operationMode === 'MAINTENANCE'}
+        className="btn-maintenance"
+      >
         {loading && operationMode !== 'MAINTENANCE' ? "⏳ 전환 중..." : "🛠️ 정비 모드 시작"}
       </button>
-      <button onClick={onStop} disabled={loading || !operationMode}>
-        {loading && operationMode ? "⏳ 정지 중..." : "⏸️ 시스템 전체 정지"}
-      </button>
-      <button onClick={onDangerMode} disabled={loading}>
+      <button onClick={onDangerMode} disabled={loading} className="btn-danger-zone">
         ⚠️ 위험 구역 설정
       </button>
       <div className="status-line">

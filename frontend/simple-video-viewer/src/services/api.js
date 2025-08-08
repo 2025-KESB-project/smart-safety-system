@@ -44,16 +44,17 @@ export const zoneAPI = {
     }
   },
   /**
-   * 새로운 위험 구역을 저장합니다.
-   * @param {Array<Object>} zones - 저장할 위험 구역 데이터
+   * 새로운 위험 구역을 생성합니다.
+   * @param {Object} zoneData - 생성할 위험 구역 데이터 (id, name, points 포함)
    * @returns {Promise<Object>} 성공 메시지
    */
-  saveZones: async (zones) => {
+  createZone: async (zoneData) => {
     try {
-      const response = await apiClient.post('/api/zones', zones);
+      // POST 요청의 body에 zoneData를 전달합니다.
+      const response = await apiClient.post('/api/zones', zoneData);
       return response.data;
     } catch (error) {
-      console.error('Error saving zones:', error);
+      console.error('Error creating zone:', error);
       throw error;
     }
   },

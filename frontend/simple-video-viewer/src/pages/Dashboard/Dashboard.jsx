@@ -56,16 +56,23 @@ export default function Dashboard() {
     initialize, setActiveId, handleControl, 
     enterDangerMode, exitDangerMode, setConfigAction, setSelectedZoneId,
     setNewZoneName, setImageSize, handleCreateZone, handleUpdateZone, handleDeleteZone,
-    setPopupError
+    setPopupError, testLotoCondition // 디버깅용 액션 가져오기
   } = useDashboardStore();
 
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const navigate = useNavigate();
 
-  // 2. 초기 데이터 로딩 및 시간 표시
+  // 2. 초기 데이터 로딩 및 WebSocket 연결, 그리고 정리
   useEffect(() => {
-    initialize(); // 스토어의 초기화 함수 호출
-  }, [initialize]);
+    // 컴포넌트가 마운트될 때 초기화 함수를 호출합니다.
+    initialize();
+
+    // 컴포넌트가 언마운트될 때 실행될 클린업 함수를 반환합니다.
+    // 이것은 StrictMode에서의 이중 호출 및 페이지 이동 시 메모리 누수를 방지합니다.
+    return () => {
+      useDashboardStore.getState().disconnect();
+    };
+  }, []); // 의존성 배열을 비워서 마운트/언마운트 시에만 실행되도록 보장
 
   // 3. 유저의 이름을 로컬 스토리지에서 가져옵니다.
   const [username, setUsername] = useState('');
@@ -101,8 +108,8 @@ export default function Dashboard() {
 
       {/* 메인 레이아웃 */}
       <div className="main-layout">
-        {/* 왼쪽 패널 */}
-        <div className="left-panel">
+        {/* 스트림 패널 (좌측) */}
+        <div className="stream-panel">
           <div className="live-stream-wrapper">
             {isDangerMode && (configAction === 'create' || configAction === 'update') ? (
               <DangerZoneSelector
@@ -128,20 +135,42 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* 오른쪽 패널 */}
-        <div className="right-panel">
+        {/* 제어 및 로그 패널 (우측) */}
+        <div className="control-panel">
           {loading ? <div className="loading">로딩 중…</div> :
            error ? <div className="error">{error}</div> :
            !isDangerMode ? (
             <>
-              <VideoLogTable logs={logs} activeId={activeId} onSelect={setActiveId} />
+              {/* 긴급 대응 영역 */}
+              <div className="emergency-response-panel">
+                <button 
+                  className="emergency-stop-btn"
+                  onClick={() => handleControl('stop')} 
+                  disabled={loading} /* 로딩 중이 아닐 때는 항상 활성화 */
+                >
+                  🚨 긴급 정지
+                </button>
+              </div>
+
+              {/* 일반 제어 영역 */}
               <ConveyorMode
+                className="control-board"
                 operationMode={operationMode}
                 loading={loading}
                 onStartAutomatic={() => handleControl('start_automatic')}
                 onStartMaintenance={() => handleControl('start_maintenance')}
                 onStop={() => handleControl('stop')}
                 onDangerMode={enterDangerMode}
+              />
+              {/* LOTO 테스트 버튼 임시 추가 */}
+              <button onClick={testLotoCondition} style={{marginTop: '10px', background: '#777', color: 'white', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer'}}>
+                [DEBUG] LOTO 테스트 상태 만들기
+              </button>
+              <VideoLogTable 
+                className="log-board"
+                logs={logs} 
+                activeId={activeId} 
+                onSelect={setActiveId} 
               />
             </>
           ) : (

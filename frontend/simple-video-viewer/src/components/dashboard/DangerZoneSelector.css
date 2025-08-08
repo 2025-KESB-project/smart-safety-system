@@ -1,10 +1,7 @@
 /* DangerZoneSelector.css */
 
-/* 부모(.live-stream-wrapper)의 padding까지 포함해서 꽉 채우기 */
 .dz-wrapper {
-  position: absolute;
-  top: 0;
-  left: 0;
+  position: relative; /* absolute에서 relative로 변경 */
   width: 100%;
   height: 100%;
   overflow: hidden; /* 내부 요소가 밖으로 나가지 않도록 */
