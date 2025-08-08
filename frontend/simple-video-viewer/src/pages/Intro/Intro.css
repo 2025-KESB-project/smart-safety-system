@@ -155,26 +155,26 @@ html, body {
 /* ===== 오버레이 텍스트 ===== */
 .hero-text {
   position: absolute;
-  top: 50%;
+  top: 40%;
   left: 50%;
   transform: translate(-50%, -50%);
   color: #fff;
   text-align: center;
-  max-width: 800px;
-  padding: 20px 30px;
+  max-width: 1000px;
+  padding: 40px 70px;
   background: rgba(0, 0, 0, 0.4);
   border-radius: 8px;
   z-index: 1;
 }
 
 .hero-text h2 {
-  font-size: 28px;
+  font-size: 30px;
   font-weight: bold;
   margin-bottom: 16px;
 }
 
 .hero-text p {
-  font-size: 18px;
+  font-size: 20px;
   line-height: 1.5;
 }
 
