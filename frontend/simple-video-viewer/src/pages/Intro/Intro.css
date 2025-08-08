@@ -213,13 +213,23 @@ html, body {
   justify-content: center;
   position: relative;
 }
-
-.streaming-video video {
+.video-wrap {
+  position: relative;       /* ✅ 배지의 기준점 */
   width: 100%;
   max-width: 800px;
+  aspect-ratio: 16 / 9;     /* 비율 고정 + 반응형 */
   border-radius: 12px;
+  overflow: hidden;         /* 둥근 모서리로 클리핑 */
   box-shadow: 0 4px 20px rgba(0,0,0,0.2);
   background: #000;
+}
+
+.video-wrap video {
+  position: absolute;
+  inset: 0;                 /* top/right/bottom/left: 0 */
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .live-badge {
@@ -313,7 +323,7 @@ html, body {
   font-size: 1.2rem;
   line-height: 1.6;
 }
-/* ===== 고객 맞춤 서비스 섹션 ===== */
+/* ===== 위험구역 섹션 ===== */
 .service-section {
   display: flex;
   justify-content: space-between;
@@ -399,7 +409,7 @@ html, body {
 
 .alert-overlay .title {
   font-weight: bold;
-  font-size: 18px;
+  font-size: 20px;
   margin-bottom: 6px;
   color: #ff4d4f;
 }
@@ -409,36 +419,77 @@ html, body {
   color: #333;
 }
 
-/* AI 섹션 가득 채우기 */
+/*===== AI 섹션 =====*/
 .ai-section {
-  min-height: 100vh;          /* ← 핵심 */
+  min-height: 70vh;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 40px;
-  padding: 100px 24px;
+  padding: 60px 24px;
   background: #fff;
   border-top: 1px solid #eee;
 }
 
-/* AI 시각 영역(박스) — 없으면 깡통처럼 보여서 하나 만들어 둠 */
-.ai-visual {
-  flex: 1.2;
+
+.ai-section { 
+  scroll-margin-top: 100px;
+  min-height: 80vh;
   display: flex;
-  justify-content: center;
-  align-items: center;
-}
-.ai-card {
-  width: 100%;
-  height: 60vh;               /* 화면 대부분 차지 */
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-  background: linear-gradient(135deg,#f7f7f7,#eaeaea);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  color: #555;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 40px;
+  padding: 80px 24px;
+  background: #fff;
+  border-top: 1px solid #eee;
 }
 
-.ai-section .streaming-text { flex: 1; }
+.AI-image {
+  flex: 1.2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.AI-image img {
+  width: 100%;
+  max-width: 900px;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  margin-bottom: 500px;
+  object-fit: cover;
+}
+
+.ai-section .streaming-text {
+  flex: 1;
+  margin-top: 140px;
+}
+
+.ai-section .streaming-text h2 {
+  font-size: 30px;
+  margin-bottom: 10px;
+}
+
+.ai-section .streaming-text p {
+  font-size: 20px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+@media (max-width: 992px) {
+  .ai-section {
+    min-height: unset;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 24px;
+  }
+
+  .AI-image img {
+    max-width: 100%;
+  }
+
+  .ai-section .streaming-text {
+    text-align: left;
+  }
+}
