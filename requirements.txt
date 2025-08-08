@@ -1,20 +1,13 @@
-# Core & Web Server
-fastapi==0.104.1
-uvicorn==0.24.0
-pydantic==2.5.0
+fastapi~=0.104.1
+firebase_admin==7.0.0
 loguru==0.7.2
-python-dotenv==1.0.0
-websockets==12.0
-
-# Computer Vision & AI/ML
-opencv-python==4.8.1.78
+mediapipe==0.10.21
 numpy==1.24.3
+opencv_python==4.8.1.78
+Pillow==11.3.0
+protobuf==6.31.1
+pydantic~=2.5.0
+pyserial==3.5
 torch==2.1.0
 ultralytics==8.0.196
-
-# Database
-firebase-admin
-google-cloud-firestore
-
-# GPIO (Optional - for Raspberry Pi deployment)
-# RPi.GPIO==0.7.1
+uvicorn~=0.24.0
