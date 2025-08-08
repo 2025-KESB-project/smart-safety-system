@@ -104,6 +104,11 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
         }
     })
 
+    # --- 안정적인 프레임 처리를 위한 설정 ---
+    TARGET_FPS = 15  # 목표 FPS를 15로 설정
+    FRAME_DURATION = 1 / TARGET_FPS
+    last_processed_time = time.perf_counter()
+
     while True:
         try:
             # 1. FastAPI 서버로부터 명령 수신 및 처리
@@ -308,7 +313,7 @@ if __name__ == '__main__':
     logger.info("Vision worker를 단독으로 실행합니다 (테스트 모드)")
     cmd_q = Queue()
     log_q = Queue()
-    frame_q = Queue(maxsize=2)
+    frame_q = Queue(maxsize=20)
 
     # 테스트를 위해 15초 후에 정지 명령 전송
     def send_stop_command():

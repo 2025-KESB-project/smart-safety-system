@@ -65,7 +65,7 @@ async def lifespan(app: FastAPI):
     # 1. 프로세스간 통신을 위한 Queue 생성
     command_queue = Queue()
     log_queue = Queue()
-    frame_queue = Queue(maxsize=2)
+    frame_queue = Queue(maxsize=20)
     app.state.command_queue = command_queue
     app.state.frame_queue = frame_queue
     logger.info("프로세스 통신용 Queues 생성 완료.")
