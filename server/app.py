@@ -45,6 +45,13 @@ async def queue_listener(log_queue: Queue, app: FastAPI):
             
             if msg_type == "LOG":
                 await db_service.log_event(data)
+            elif msg_type == "STATUS_UPDATE":
+                # 상태 업데이트는 DB에 저장하지 않고, WebSocket으로 UI에만 직접 전송
+                # 기존 로그 채널을 통해 type으로 구분하여 메시지를 보낸다.
+                asyncio.run_coroutine_threadsafe(
+                    websocket_service.broadcast_to_channel('logs', message), # type과 data를 모두 포함한 전체 메시지 전송
+                    loop
+                )
             elif msg_type == "ALERT":
                 # WebSocket을 통해 UI로 긴급 알림 전송
                 asyncio.run_coroutine_threadsafe(

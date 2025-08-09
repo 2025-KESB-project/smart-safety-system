@@ -25,6 +25,7 @@ from logic.logic_facade import LogicFacade
 from control.control_facade import ControlFacade
 from server.state_manager import SystemStateManager
 from server.services.zone_service import ZoneService
+from server.models.websockets import StatusUpdateMessage
 from core.serial_communicator import SerialCommunicator
 from core.drawing_utils import put_text_korean
 
@@ -104,6 +105,8 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
         }
     })
 
+    last_status_message_data = None # 마지막으로 전송한 상태를 저장하는 변수
+
     # --- 안정적인 프레임 처리를 위한 설정 ---
     TARGET_FPS = 15  # 목표 FPS를 15로 설정
     FRAME_DURATION = 1 / TARGET_FPS
@@ -171,13 +174,15 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
 
                 # 로직 처리
                 logic_facade_start_time = time.perf_counter()
-                actions = logic_facade.process(
+                logic_result = logic_facade.process(
                     detection_result=detection_result,
                     sensor_data=sensor_data,
                     current_mode=current_mode,
                     current_conveyor_status=conveyor_is_on,
                     current_conveyor_speed=conveyor_speed
                 )
+                actions = logic_result.get("actions", [])
+                current_risk_level = logic_result.get("status", {}).get("risk_level", "SAFE") # LogicFacade가 결정한 위험 등급
                 logic_facade_end_time = time.perf_counter()
 
                 # 액션 실행
@@ -248,13 +253,37 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                 else:
                     status_text = "Status: RUNNING"
 
-                risk_factors = logic_facade.last_risk_analysis.get("risk_factors", [])
-                risk_text = "Risk: DETECTED" if risk_factors else "Risk: SAFE"
-                risk_color = (0, 0, 255) if risk_factors else (0, 255, 0)
+                risk_text = f"Risk: {current_risk_level}"
+                risk_color = (0, 0, 255) if current_risk_level in ["CRITICAL", "LOTO_RISK_DETECTED"] else ((0, 165, 255) if current_risk_level == "WARNING" else (0, 255, 0))
 
                 display_frame = put_text_korean(display_frame, mode_text, (15, 50), 22, (255, 255, 0))
                 display_frame = put_text_korean(display_frame, status_text, (15, 80), 22, (0, 255, 255))
                 display_frame = put_text_korean(display_frame, risk_text, (15, 110), 22, risk_color)
+
+                # --- 실시간 상태 업데이트 메시지 생성 및 전송 ---
+                status_message_data = None
+                try:
+                    # conveyor_status를 변수에서 직접 결정하여 안정성 확보
+                    conveyor_final_status = "STOPPED"
+                    if final_status.get('conveyor_is_on', False):
+                        if final_status.get('conveyor_speed', 100) < 100:
+                            conveyor_final_status = "SLOWDOWN"
+                        else:
+                            conveyor_final_status = "RUNNING"
+
+                    status_message = StatusUpdateMessage(
+                        operation_mode=final_status.get('operation_mode', 'N/A'),
+                        conveyor_status=conveyor_final_status,
+                        conveyor_speed=final_status.get('conveyor_speed', 0),
+                        risk_level=current_risk_level
+                    )
+                    status_message_data = status_message.model_dump()
+                except Exception as e:
+                    logger.warning(f"상태 업데이트 메시지 생성 실패: {e}")
+
+                if status_message_data and status_message_data != last_status_message_data:
+                    log_queue.put({"type": "STATUS_UPDATE", "data": status_message_data})
+                    last_status_message_data = status_message_data
             
             else: # state_manager.is_active()가 False일 때
                 # 시스템이 비활성화되었을 때, 컨베이어 전원이 켜져 있다면 끈다.
@@ -277,14 +306,14 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
             loop_end_time = time.perf_counter()
             
             # --- 성능 측정 로그 ---
-            if state_manager.is_active():
-                logger.debug(f"[PERF] Capture: {((capture_end_time - capture_start_time) * 1000):.2f}ms | "
-                             f"Detect: {((detect_end_time - detect_start_time) * 1000):.2f}ms | "
-                             f"Logic: {((logic_facade_end_time - logic_facade_start_time) * 1000):.2f}ms | "
-                             f"Control: {((control_end_time - control_start_time) * 1000):.2f}ms | "
-                             f"Draw: {((draw_end_time - draw_start_time) * 1000):.2f}ms | "
-                             f"QueuePut: {((queue_put_end_time - queue_put_start_time) * 1000):.2f}ms | "
-                             f"TOTAL: {((loop_end_time - loop_start_time) * 1000):.2f}ms")
+            # if state_manager.is_active():
+            #     logger.debug(f"[PERF] Capture: {((capture_end_time - capture_start_time) * 1000):.2f}ms | "
+            #                  f"Detect: {((detect_end_time - detect_start_time) * 1000):.2f}ms | "
+            #                  f"Logic: {((logic_facade_end_time - logic_facade_start_time) * 1000):.2f}ms | "
+            #                  f"Control: {((control_end_time - control_start_time) * 1000):.2f}ms | "
+            #                  f"Draw: {((draw_end_time - draw_start_time) * 1000):.2f}ms | "
+            #                  f"QueuePut: {((queue_put_end_time - queue_put_start_time) * 1000):.2f}ms | "
+            #                  f"TOTAL: {((loop_end_time - loop_start_time) * 1000):.2f}ms")
 
             await asyncio.sleep(0.01)
 

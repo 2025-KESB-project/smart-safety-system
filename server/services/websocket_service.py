@@ -25,9 +25,18 @@ class ConnectionManager:
 
     async def broadcast(self, message: Dict[str, Any]):
         """연결된 모든 클라이언트에게 메시지를 브로드캐스트합니다."""
-        logger.info(f"Broadcasting message to {len(self.active_connections)} client(s): {message.get('event_type')}")
-        for connection in self.active_connections:
-            await connection.send_json(message)
+        # 메시지 타입이나 주요 정보를 로그에 남겨서 디버깅을 용이하게 합니다.
+        msg_type_for_log = message.get('type') or message.get('data', {}).get('event_type', 'Unknown')
+        logger.info(f"Broadcasting message (type: {msg_type_for_log}) to {len(self.active_connections)} client(s).")
+
+        # 클라이언트가 닫힌 연결에 메시지를 보내려고 할 때 발생하는 오류를 방지합니다.
+        active_connections = self.active_connections[:] # 반복 중 리스트 변경을 피하기 위해 복사본 사용
+        for connection in active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception as e:
+                logger.warning(f"클라이언트로 메시지 전송 실패: {e}. 해당 연결을 제거합니다.")
+                self.disconnect(connection)
 
 class WebSocketService:
     """모든 WebSocket 채널(logs, alerts 등)을 중앙에서 관리하는 서비스"""

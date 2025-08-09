@@ -75,7 +75,12 @@ class DBService:
 
             # 3. WebSocketService에 'logs' 채널로 방송 위임
             if db_success and self.websocket_service:
-                await self.websocket_service.broadcast_to_channel('logs', validated_data)
+                # 클라이언트는 {type: 'LOG', data: {...}} 형태를 기대합니다.
+                message_to_broadcast = {
+                    "type": "LOG",
+                    "data": validated_data
+                }
+                await self.websocket_service.broadcast_to_channel('logs', message_to_broadcast)
             
         except Exception as e:
             logger.error(f"이벤트 로그 저장 또는 방송 중 오류 발생: {e}")

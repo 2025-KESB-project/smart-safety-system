@@ -65,6 +65,7 @@ class RuleEngine:
             
             if has_intrusion:
                 # 침입이 있을 경우, 추가적으로 경고 및 로깅
+                # TODO 센서가 감지되거나 넘어짐 감지되었을 때 LOTO 경고를 트리거합니다.
                 actions.append({"type": "TRIGGER_ALARM_CRITICAL", "details": {"reason": "LOTO_zone_intrusion"}})
                 log_action = {"type": "LOG_LOTO_ACTIVE", "details": {}}
             else:
