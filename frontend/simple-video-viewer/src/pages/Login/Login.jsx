@@ -21,6 +21,7 @@ function Login() {
   // 🔥 실제로 만들어둔 계정 정보 (백엔드 대신 메모리로 관리)
   const [createdEmail, setCreatedEmail] = useState("");
   const [createdPw, setCreatedPw] = useState("");
+  const [createdUsername, setCreatedUsername] = useState("");
 
   // 로그인
   const handleLogin = () => {
@@ -31,6 +32,8 @@ function Login() {
 
     if (email === createdEmail && pw === createdPw) {
       alert("✅ 로그인 성공!");
+        localStorage.setItem("userEmail", createdEmail);
+        localStorage.setItem("username", createdUsername || "관리자");
       navigate("/dashboard");
     } else {
       alert("❌ 이메일 또는 비밀번호가 일치하지 않습니다.");
@@ -44,6 +47,7 @@ function Login() {
       setCreatedPw(tempPw);
       setEmail(tempEmail);
       setPw(tempPw);
+      setCreatedUsername(tempUsername);
       alert("✅ 계정이 생성되었습니다!");
       setShowSignup(false);
       setTempEmail("");
@@ -61,7 +65,7 @@ function Login() {
     >
       <div className="login-card">
         <div className="login-triangle" />
-        <h1>Safe Guard-4</h1>
+        <h1>Conveyor Guard</h1>
         <h2>Login</h2>
         <button
           className="signup-btn"
