@@ -20,9 +20,9 @@ class PersonDetector:
             if torch.cuda.is_available():
                 self.device = torch.device("cuda")
                 logger.success("PersonDetector: NVIDIA GPU (CUDA)를 감지하여 사용합니다.")
-            elif torch.backends.mps.is_available():
-                self.device = torch.device("mps")
-                logger.success("PersonDetector: Apple Silicon GPU (MPS)를 감지하여 사용합니다.")
+            # elif torch.backends.mps.is_available():
+            #     self.device = torch.device("mps")
+            #     logger.success("PersonDetector: Apple Silicon GPU (MPS)를 감지하여 사용합니다.")
             else:
                 self.device = torch.device("cpu")
                 logger.warning("PersonDetector: 사용 가능한 GPU가 없어 CPU를 사용합니다.")

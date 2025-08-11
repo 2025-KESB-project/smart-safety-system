@@ -64,5 +64,24 @@ class LogicFacade:
             current_speed_percent=current_conveyor_speed
         )
         
-        # 3. 결정된 actions 목록을 그대로 반환하여 호출자(background_worker)가 처리하도록 합니다.
-        return actions
+        # 3. 최종 시스템 상태(위험 등급) 결정
+        risk_factors = self.last_risk_analysis.get("risk_factors", [])
+        current_risk_level = "SAFE" # 기본값을 SAFE로 설정
+        if risk_factors:
+            # 위험도 순서: CRITICAL > LOTO > WARNING > NOTICE
+            if any(f["type"] == "POSTURE_FALLING" for f in risk_factors) or any(f["type"] == "SENSOR_ALERT" for f in risk_factors):
+                current_risk_level = "CRITICAL"
+            elif current_mode == "MAINTENANCE" and any(f["type"] == "ZONE_INTRUSION" for f in risk_factors):
+                current_risk_level = "LOTO_RISK_DETECTED"
+            elif any(f["type"] == "ZONE_INTRUSION" for f in risk_factors):
+                current_risk_level = "WARNING"
+            elif any(f["type"] == "POSTURE_CROUCHING" for f in risk_factors):
+                current_risk_level = "NOTICE"
+
+        # 4. 최종 결과 반환
+        return {
+            "actions": actions,
+            "status": {
+                "risk_level": current_risk_level
+            }
+        }

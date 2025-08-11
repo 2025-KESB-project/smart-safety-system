@@ -48,3 +48,20 @@ class LogMessage(BaseModel):
                 "timestamp": "2025-07-28T15:00:00.123456"
             }
         }
+
+class StatusUpdateMessage(BaseModel):
+    """실시간 시스템 상태 업데이트를 위한 웹소켓 메시지 모델"""
+    operation_mode: str = Field(..., description="현재 시스템 동작 모드", examples=["AUTOMATIC", "MAINTENANCE", "STOPPED"])
+    conveyor_status: str = Field(..., description="컨베이어 물리적 상태", examples=["RUNNING", "STOPPED", "SLOWDOWN"])
+    conveyor_speed: int = Field(..., description="컨베이어 속도 (%)", examples=[100, 50, 0])
+    risk_level: str = Field(..., description="현재 감지된 위험 수준", examples=["SAFE", "WARNING", "CRITICAL", "LOTO_RISK_DETECTED"])
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "operation_mode": "AUTOMATIC",
+                "conveyor_status": "RUNNING",
+                "conveyor_speed": 100,
+                "risk_level": "SAFE"
+            }
+        }

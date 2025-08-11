@@ -66,20 +66,30 @@ const useDashboardStore = create((set, get) => ({
     socketInstance.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
-        console.log(`[WS_MESSAGE_RECEIVED] at ${new Date().toISOString()}:`, message);
+        console.log(`[WS_MESSAGE_RECEIVED]`, message);
 
-        // 1. 로그 목록에 항상 추가
-        if (message && message.event_type) {
-          get().addLog(message);
-        }
+        // 메시지 타입에 따라 분기 처리
+        switch (message.type) {
+          case 'LOG':
+            // 로그 데이터는 addLog 액션을 통해 처리 (내부적으로 위험 등급 알림도 처리)
+            get().addLog(message.data);
+            break;
 
-        // 2. LOTO 상태 업데이트 로직 (백엔드 코드 기반)
-        const isWarning = message.log_risk_level === 'WARNING';
-        const isPersonDetected = message.details?.description?.includes('Person detected');
+          case 'STATUS_UPDATE':
+            // 상태 업데이트 메시지는 스토어의 상태를 직접 업데이트
+            const { operation_mode, conveyor_status, conveyor_speed, risk_level } = message.data;
+            set({
+              operationMode: operation_mode,
+              conveyorStatus: conveyor_status,
+              conveyorSpeed: conveyor_speed,
+              riskLevel: risk_level,
+            });
+            break;
 
-        if (isWarning && isPersonDetected) {
-          set({ personDetectedInMaintenance: true });
-          console.log("[LOTO] 위험 구역 내 사람 감지 로그 수신. personDetectedInMaintenance를 true로 설정합니다.");
+          default:
+            // 알 수 없는 타입의 메시지는 경고만 출력
+            console.warn("알 수 없는 메시지 타입 수신:", message.type);
+            break;
         }
 
       } catch (e) {
@@ -188,15 +198,10 @@ const useDashboardStore = create((set, get) => ({
   handleControl: async (controlType, confirmed = false) => {
     // --- LOTO 안전 검사 (팝업 방식) ---
     if (controlType === 'start_automatic') {
-      const { operationMode, personDetectedInMaintenance, lotoSensorOn } = get();
-      const isLotoEngaged = operationMode === 'MAINTENANCE' && (personDetectedInMaintenance || lotoSensorOn);
+      const { riskLevel } = get(); // 스토어에서 최신 riskLevel 상태를 가져옵니다.
 
-      if (isLotoEngaged) {
-        const reasons = [];
-        if (personDetectedInMaintenance) reasons.push("작업 공간 내 사람이 감지되었습니다.");
-        if (lotoSensorOn) reasons.push("LOTO 관련 센서가 활성화 상태입니다.");
-        
-        const errorMessage = `LOTO 조건 위반: ${reasons.join(' ')}`;
+      if (riskLevel === 'LOTO_RISK_DETECTED') {
+        const errorMessage = `LOTO 조건 위반: 정비 구역에 사람이 감지되어 시스템을 시작할 수 없습니다.`;
         get().setPopupError(errorMessage);
         return; // API 호출을 중단하고 함수 종료
       }
