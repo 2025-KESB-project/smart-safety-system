@@ -17,7 +17,6 @@ from typing import Dict, Any
 project_root = Path(__file__).resolve().parent
 sys.path.append(str(project_root))
 
-# TODO config 설정
 from config.config import get_config
 from input_adapter.input_facade import InputAdapter
 from detect.detect_facade import Detector
@@ -54,7 +53,7 @@ def initialize_components(config: Dict[str, Any]):
 
     logger.info("모든 비전 워커 컴포넌트가 성공적으로 초기화되었습니다.")
     
-    return input_adapter, detector, control_facade, state_manager, logic_facade
+    return input_adapter, detector, control_facade, state_manager, logic_facade, communicator
 
 # --------------------------------------------------------------------------
 # 핵심 안전 시스템 워커 함수
@@ -67,7 +66,13 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
 
     config = get_config()
     try:
-        input_adapter, detector, control_facade, state_manager, logic_facade = initialize_components(config)
+        input_adapter, detector, control_facade, state_manager, logic_facade, communicator = initialize_components(config)
+
+        # --- 하드웨어 비상 정지 신호 리스너 설정 및 시작 ---
+        communicator.set_lock_system_callback(state_manager.lock_system)
+        communicator.set_is_locked_checker(state_manager.is_locked_status)
+        communicator.start_listening()
+        # ----------------------------------------------
 
         # --- 워밍업 단계 시작 ---
         logger.info("모델 워밍업을 시작합니다... (초기 지연을 줄이기 위한 과정)")
@@ -105,9 +110,8 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
         }
     })
 
-    last_status_message_data = None # 마지막으로 전송한 상태를 저장하는 변수
-
-    # --- 안정적인 프레임 처리를 위한 설정 ---
+    last_status_message_data = None
+    was_locked = False # 이전 프레임의 잠금 상태를 기억하는 변수
     TARGET_FPS = 15  # 목표 FPS를 15로 설정
     FRAME_DURATION = 1 / TARGET_FPS
     last_processed_time = time.perf_counter()
@@ -135,6 +139,37 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                     # 모드 변경 후 즉시 루프를 다시 시작하여 새로운 상태를 적용
                     continue
                 
+                elif cmd_type == "RESET": # 리셋 명령 처리
+                    state_manager.reset_system()
+                    logger.info("RESET 명령 수신, 시스템 잠금 상태를 해제합니다.")
+                    # 만약을 위해 전원 차단 명령을 한 번 더 보냄
+                    control_facade.execute_actions([{"type": "POWER_OFF", "details": {"reason": "System reset"}}])
+                    
+                    # --- 상태 변경 후 즉시 UI에 업데이트 전송 ---
+                    try:
+                        logical_status = state_manager.get_status()
+                        physical_status = control_facade.get_all_statuses()
+                        final_status = {**logical_status, **physical_status}
+                        
+                        # operation_mode가 None일 경우를 대비하여 기본값 설정
+                        op_mode = final_status.get('operation_mode') or 'STOPPED'
+
+                        status_message = StatusUpdateMessage(
+                            operation_mode=op_mode,
+                            conveyor_status="STOPPED", # 리셋 후에는 항상 정지 상태
+                            conveyor_speed=0,
+                            risk_level="SAFE", # 리셋 후에는 안전 상태
+                            is_locked=False # 리셋되었으므로 False
+                        )
+                        status_message_data = status_message.model_dump()
+                        log_queue.put({"type": "STATUS_UPDATE", "data": status_message_data})
+                        last_status_message_data = status_message_data
+                        logger.info("시스템 리셋 후 상태 정보를 UI로 전송했습니다.")
+                    except Exception as e:
+                        logger.error(f"리셋 후 상태 정보 전송 실패: {e}")
+
+                    continue
+
                 # 기타 커맨드 처리
                 elif cmd_type == "UPDATE_ZONES":
                     zones = command.get("data", [])
@@ -153,9 +188,22 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
             display_frame = raw_frame.copy()
             loop = asyncio.get_running_loop()
 
+            # --- 시스템 잠금 상태 확인 및 처리 ---
+            is_locked_now = state_manager.is_locked_status()
+
+            # 1. 잠금 상태로 "전환"되는 순간을 감지하여 전원을 차단합니다.
+            if is_locked_now and not was_locked:
+                logger.warning("시스템 잠금 상태로 전환됨! 전원을 즉시 차단합니다.")
+                control_facade.execute_actions([{"type": "POWER_OFF", "details": {"reason": "System LOCKED"}}])
+
+            # 2. 현재 프레임이 잠금 상태인지 확인하고 UI 처리 및 로직 실행을 결정합니다.
+            if is_locked_now:
+                # 잠금 상태일 경우, 모든 로직을 중단하고 화면에 경고만 표시
+                display_frame = put_text_korean(display_frame, "SYSTEM LOCKED", (15, 50), 30, (0, 0, 255))
+                display_frame = put_text_korean(display_frame, "관리자 리셋 필요", (15, 90), 22, (0, 255, 255))
+            
             # 3. 시스템 활성화 상태였을 때만 안전 로직 및 시각화 수행
-            logic_start_time = time.perf_counter()
-            if state_manager.is_active():
+            elif state_manager.is_active():
                 sensor_data = input_adapter.get_sensor_data()
                 
                 # 객체 탐지 (CPU 집약적 작업을 별도 스레드에서 실행하여 이벤트 루프 블로킹 방지)
@@ -190,6 +238,11 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                 control_actions = []
                 for action in actions:
                     action_type = action.get("type")
+                    if action_type == 'LOCK_SYSTEM':
+                        reason = action.get("details", {}).get("reason", "Logic-driven lock")
+                        state_manager.lock_system(reason)
+                        # LOCK_SYSTEM은 다른 제어 액션과 함께 처리될 수 있으므로 continue하지 않음
+
                     if action_type in ['POWER_ON', 'POWER_OFF', 'REDUCE_SPEED_50', 'RESUME_FULL_SPEED'] or action_type.startswith('TRIGGER_ALARM_'):
                         control_actions.append(action)
                     
@@ -275,7 +328,8 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                         operation_mode=final_status.get('operation_mode', 'N/A'),
                         conveyor_status=conveyor_final_status,
                         conveyor_speed=final_status.get('conveyor_speed', 0),
-                        risk_level=current_risk_level
+                        risk_level=current_risk_level,
+                        is_locked=final_status.get('is_locked', False) # is_locked 상태 추가
                     )
                     status_message_data = status_message.model_dump()
                 except Exception as e:
@@ -315,6 +369,9 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
             #                  f"QueuePut: {((queue_put_end_time - queue_put_start_time) * 1000):.2f}ms | "
             #                  f"TOTAL: {((loop_end_time - loop_start_time) * 1000):.2f}ms")
 
+            # --- 다음 루프를 위해 현재 잠금 상태를 저장 ---
+            was_locked = is_locked_now
+
             await asyncio.sleep(0.01)
 
         except Exception as e:
@@ -322,6 +379,8 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
             log_queue.put({"type": "LOG", "data": {"event_type": "LOG_SYSTEM_ERROR", "details": {"message": str(e)}, "log_level": "ERROR"}})
             await asyncio.sleep(5)
 
+    # 어플리케이션 종료 시 시리얼 리소스 정리
+    communicator.close()
     input_adapter.release()
     logger.info("비전 워커 프로세스가 종료되었습니다.")
 

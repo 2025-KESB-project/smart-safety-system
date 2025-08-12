@@ -54,6 +54,8 @@ class RuleEngine:
             log_type = "LOG_CRITICAL_FALLING" if is_falling else "LOG_CRITICAL_SENSOR"
             actions.append({"type": "POWER_OFF", "details": {"reason": reason}})
             actions.append({"type": "TRIGGER_ALARM_CRITICAL", "details": {"reason": reason}})
+            # 시스템 잠금 액션 추가
+            actions.append({"type": "LOCK_SYSTEM", "details": {"reason": reason}})
             log_action = {"type": log_type, "details": {}}
 
         # 규칙 1: 정비(MAINTENANCE) 모드 - LOTO(Lock-Out, Tag-Out) 로직

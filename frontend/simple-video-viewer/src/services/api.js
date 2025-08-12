@@ -133,4 +133,13 @@ export const controlAPI = {
       throw error;
     }
   },
+  resetSystem: async () => {
+    try {
+      const response = await apiClient.post('/api/control/reset');
+      return response.data;
+    } catch (error) {
+      console.error('Error resetting system:', error);
+      throw error;
+    }
+  },
 };

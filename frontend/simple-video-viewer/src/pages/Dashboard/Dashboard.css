@@ -97,6 +97,7 @@ html, body {
   padding: 20px;
   gap: 20px;
   box-sizing: border-box;
+  transition: filter 0.3s ease-in-out;
 }
 
 /* 스트림 패널 (좌측) */
@@ -306,52 +307,6 @@ html, body {
   border-radius: 4px;
   box-sizing: border-box;
 }
-/* src/pages/Dashboard/Dashboard.css */
-
-.right-panel {
-  flex: none;
-  width: 500px;
-  display: flex;
-  flex-direction: column;
-
-  /* 추가: 부모 컨테이너(main-layout)에서 남은 높이 채우기 */
-  height: 100%;
-
-  /* 추가: 내부 스크롤 제어 */
-  overflow: hidden;
-    min-height: 0;
-}
-.log-board {
-  display: flex;
-  flex-direction: column;
-}
-/* 위험 구역 이름 입력 */
-.zone-name-input {
-  width: 100%;
-  padding: 8px;
-  margin-bottom: 8px;
-  font-size: 14px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-}
-/* src/pages/Dashboard/Dashboard.css */
-
-.right-panel {
-  flex: none;
-  width: 500px;
-  display: flex;
-  flex-direction: column;
-
-  /* 추가: 부모 컨테이너(main-layout)에서 남은 높이 채우기 */
-  height: 100%;
-
-  /* 추가: 내부 스크롤 제어 */
-  overflow: hidden;
-    min-height: 0;
-}
-.log-board {
-  display: flex;
-  flex-direction: column;
 
 /* Error Popup Modal */
 .error-popup-overlay {
@@ -405,65 +360,114 @@ html, body {
   font-size: 16px;
   color: #333;
 }
-  /* 추가 */
-  flex: 1;        /* 오른쪽 패널 내에서 남은 높이를 채움 */
-  min-height: 0;  /* 줄어들 수 있도록 허용 */
-}
 
-.table-wrapper {
-  flex: 1 1 auto;
-  overflow-y: auto;
-}
-/* 팝업 오버레이: 화면 전체 중앙 고정, 반투명 백그라운드 */
-.error-popup-overlay {
-  position: fixed;
-  inset: 0;
+/* --- System Locked Panel (in Control Panel) --- */
+.system-locked-panel {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   justify-content: center;
-  background: rgba(0,0,0,0.4);
-  z-index: 9999;
-}
-
-/* 팝업 컨테이너 */
-.error-popup {
-  background: #fff;
-  border-radius: 10px;
-  overflow: hidden;
-  max-width: 480px;
-  width: 95%;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
-
-/* 헤더: 레드 배경, 텍스트 중앙 정렬, 닫기 버튼 위치 */
-.error-popup-header {
-  position: relative;
-  background: #e74c3c;
-  color: #fff;
+  align-items: center;
+  height: 100%;
+  padding: 30px;
+  background-color: #c0392b; /* Dark red */
+  border-radius: 12px;
+  color: white;
   text-align: center;
-  padding: 20px 100px 20px;
-  font-size: 30px;
-  font-weight: bold;
-}
-.error-popup-header button {
-  position: absolute;
-  top: 50%;
-  right: 12px;
-  transform: translateY(-50%);
-  background: transparent;
-  border: none;
-  font-size: 60px;
-  color: #fff;
-  cursor: pointer;
-  padding: 0;
+  box-shadow: inset 0 0 15px rgba(0,0,0,0.5);
 }
 
-/* 팝업 본문: 화이트 배경, 다크 텍스트 */
-.error-popup-content {
-  background: #fff;
-  color: #333;
-  padding: 20px 100px 20px;
-  font-size: 20px;
+.system-locked-panel .system-locked-title {
+  font-size: 32px;
+  font-weight: bold;
+  margin-bottom: 15px;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.4);
+}
+
+.system-locked-panel .system-locked-message {
+  font-size: 16px;
+  margin-bottom: 25px;
   line-height: 1.5;
-  white-space: pre-wrap;
+}
+
+.system-locked-panel .system-reset-btn {
+  width: 100%;
+  padding: 20px;
+  font-size: 22px;
+  font-weight: bold;
+  color: #2c3e50;
+  background-color: #f1c40f; /* Yellow */
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.system-locked-panel .system-reset-btn:hover {
+  background-color: #f39c12;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+
+.system-locked-panel .system-reset-btn:disabled {
+  background-color: #95a5a6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* --- Global Alert Banner --- */
+.global-alert {
+  position: fixed;
+  bottom: 40px; /* 화면 하단에서의 위치 */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  max-width: 800px;
+  padding: 16px;
+  border-radius: 12px;
+  z-index: 1500;
+  color: white;
+  text-align: center;
+  box-shadow: 0 5px 25px rgba(0,0,0,0.5);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255, 255, 255, 0.3);
+  transition: all 0.5s ease-in-out;
+  animation: slide-up 0.5s ease-out forwards;
+}
+
+@keyframes slide-up {
+  from {
+    transform: translate(-50%, 100px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+.global-alert.critical {
+  background: rgba(192, 57, 43, 0.85); /* 더 강렬한 붉은색 */
+}
+
+.global-alert.high {
+  background: rgba(230, 126, 34, 0.85); /* 더 강렬한 주황색 */
+}
+
+.global-alert-content h2 {
+  margin: 0 0 8px 0;
+  font-size: 22px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  text-shadow: 1px 1px 3px rgba(0,0,0,0.6);
+}
+
+.global-alert-content p {
+  margin: 4px 0;
+  font-size: 16px;
+}
+
+.global-alert-content span {
+  font-size: 12px;
+  opacity: 0.9;
 }

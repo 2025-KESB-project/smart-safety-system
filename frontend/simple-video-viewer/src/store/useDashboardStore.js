@@ -8,7 +8,11 @@ const useDashboardStore = create((set, get) => ({
   // 1. 상태 (State)
   logs: [],
   zones: [],
-  operationMode: null,
+  operationMode: null, // 'AUTOMATIC', 'MAINTENANCE', 'STOPPED'
+  conveyorStatus: null, // 'RUNNING', 'SLOWDOWN', 'STOPPED'
+  conveyorSpeed: 0,
+  riskLevel: 'SAFE',
+  isLocked: false, // 시스템 잠금 상태
   loading: false,
   error: null,
   popupError: null,
@@ -77,12 +81,13 @@ const useDashboardStore = create((set, get) => ({
 
           case 'STATUS_UPDATE':
             // 상태 업데이트 메시지는 스토어의 상태를 직접 업데이트
-            const { operation_mode, conveyor_status, conveyor_speed, risk_level } = message.data;
+            const { operation_mode, conveyor_status, conveyor_speed, risk_level, is_locked } = message.data;
             set({
               operationMode: operation_mode,
               conveyorStatus: conveyor_status,
               conveyorSpeed: conveyor_speed,
               riskLevel: risk_level,
+              isLocked: is_locked, // is_locked 상태 업데이트
             });
             break;
 
@@ -180,6 +185,26 @@ const useDashboardStore = create((set, get) => ({
       }, 10000);
     }
   },
+
+  /**
+   * 시스템 잠금(LOCKED) 상태를 리셋합니다.
+   */
+  resetSystem: async () => {
+    set({ loading: true });
+    try {
+      await controlAPI.resetSystem();
+      // 성공적으로 리셋 명령을 보냈으므로, 서버로부터
+      // 새로운 STATUS_UPDATE 웹소켓 메시지를 기다립니다.
+      // 프론트엔드에서 즉시 상태를 변경하지 않습니다.
+    } catch (e) {
+      console.error(e);
+      const errorDetail = e.response?.data?.detail || e.message;
+      get().setPopupError(`리셋 실패: ${errorDetail}`);
+    } finally {
+      set({ loading: false });
+    }
+  },
+
   setActiveId: (id) => set({ activeId: id }),
 
   /**
@@ -196,6 +221,12 @@ const useDashboardStore = create((set, get) => ({
    * @param {'start_automatic' | 'start_maintenance' | 'stop'} controlType - 제어 종류
    */
   handleControl: async (controlType, confirmed = false) => {
+    // --- 시스템 잠금 상태 확인 (최우선) ---
+    if (get().isLocked) {
+      get().setPopupError('시스템이 잠금(LOCKED) 상태입니다. 리셋이 필요합니다.');
+      return; // API 호출을 막고 함수 종료
+    }
+
     // --- LOTO 안전 검사 (팝업 방식) ---
     if (controlType === 'start_automatic') {
       const { riskLevel } = get(); // 스토어에서 최신 riskLevel 상태를 가져옵니다.

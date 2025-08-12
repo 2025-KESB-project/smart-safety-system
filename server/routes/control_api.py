@@ -49,6 +49,16 @@ def stop_system(request: Request, command_queue: Queue = Depends(get_command_que
     command_queue.put({"command": "STOP"})
     return {"message": "System stop command sent to worker."}
 
+
+@router.post("/reset", summary="시스템 잠금(LOCKED) 상태 리셋 요청")
+def reset_system(request: Request, command_queue: Queue = Depends(get_command_queue)):
+    """
+    Vision Worker에 시스템 잠금 해제(RESET) 명령을 전송합니다.
+    """
+    logger.info("API 요청: 시스템 리셋 명령을 Worker에 전송합니다.")
+    command_queue.put({"command": "RESET"})
+    return {"message": "System reset command sent to worker."}
+
 # 참고: 상태 조회(get_status) API는 app.py의 메인 /status 엔드포인트로 역할이 이전되었습니다.
 # 해당 API는 Worker 프로세스의 생존 여부만 확인합니다.
 # 상세한 시스템 상태(모드, 속도 등)는 Worker가 관리하며, 필요한 경우 WebSocket을 통해 UI로 전송됩니다.
