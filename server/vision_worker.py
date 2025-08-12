@@ -68,8 +68,28 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
     try:
         input_adapter, detector, control_facade, state_manager, logic_facade, communicator = initialize_components(config)
 
+        # --- 하드웨어 비상 정지 콜백 함수 정의 ---
+        def handle_hardware_emergency_stop(reason: str):
+            """
+            SerialCommunicator의 백그라운드 스레드에서 호출될 콜백.
+            시스템을 잠그고, 해당 이벤트를 로그 큐에 기록한다.
+            """
+            logger.warning(f"하드웨어 비상 정지 콜백 수신: {reason}")
+            # 1. 시스템 상태를 잠금으로 변경
+            state_manager.lock_system(reason)
+
+            # 2. 로그 이벤트 생성 및 큐에 추가
+            event_data = {
+                "event_type": "LOG_CRITICAL_SENSOR",
+                "details": {"description": f"하드웨어 비상 신호 감지: {reason}"},
+                "log_risk_level": "CRITICAL",
+                "operation_mode": state_manager.get_status().get("operation_mode", "UNKNOWN")
+            }
+            log_queue.put({"type": "LOG", "data": event_data})
+            logger.info("하드웨어 비상 정지 로그를 큐에 추가했습니다.")
+
         # --- 하드웨어 비상 정지 신호 리스너 설정 및 시작 ---
-        communicator.set_lock_system_callback(state_manager.lock_system)
+        communicator.set_lock_system_callback(handle_hardware_emergency_stop)
         communicator.set_is_locked_checker(state_manager.is_locked_status)
         communicator.start_listening()
         # ----------------------------------------------
@@ -203,6 +223,7 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                 display_frame = put_text_korean(display_frame, "관리자 리셋 필요", (15, 90), 22, (0, 255, 255))
             
             # 3. 시스템 활성화 상태였을 때만 안전 로직 및 시각화 수행
+            # TODO 아두이누 하드코딩 자체 정지 데이터 받을때, 비정형 작업이면 굳이 lock을 안해도 되지 않나?
             elif state_manager.is_active():
                 sensor_data = input_adapter.get_sensor_data()
                 
@@ -254,13 +275,13 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                         description = "System is operating normally."
 
                         # 가장 중요한 위험 사실 하나를 찾아 설명과 레벨을 설정
-                        if any(f["type"] == "POSTURE_FALLING" for f in risk_factors):
-                            log_risk_level = "CRITICAL"
-                            description = "A person falling has been detected."
-                        elif any(f["type"] == "SENSOR_ALERT" for f in risk_factors):
+                        if any(f["type"] == "SENSOR_ALERT" for f in risk_factors):
                             log_risk_level = "CRITICAL"
                             sensor_type = next((f.get("sensor_type") for f in risk_factors if f["type"] == "SENSOR_ALERT"), "unknown")
                             description = f"An emergency signal from sensor '{sensor_type}' has been detected."
+                        elif any(f["type"] == "POSTURE_FALLING" for f in risk_factors):
+                            log_risk_level = "CRITICAL"
+                            description = "A person falling has been detected."
                         elif any(f["type"] == "ZONE_INTRUSION" for f in risk_factors):
                             log_risk_level = "WARNING"
                             intrusion_details = next((f.get("details") for f in risk_factors if f["type"] == "ZONE_INTRUSION"), [])
@@ -295,22 +316,42 @@ async def run_safety_system(command_queue: Queue, log_queue: Queue, frame_queue:
                 physical_status = control_facade.get_all_statuses()
                 final_status = {**logical_status, **physical_status}
 
-                mode_text = f"Mode: {final_status.get('operation_mode', 'N/A')}"
+                # --- 텍스트 및 색상 표준화 ---
+                op_mode = final_status.get('operation_mode', 'N/A')
+                if op_mode == 'AUTOMATIC':
+                    mode_text = "Mode: 운전 모드"
+                elif op_mode == 'MAINTENANCE':
+                    mode_text = "Mode: 정비 모드"
+                else:
+                    mode_text = f"Mode: {op_mode}"
+
                 is_on = final_status.get('conveyor_is_on', False)
                 speed = final_status.get('conveyor_speed', 100)
 
                 if not is_on:
-                    status_text = "Status: STOPPED"
+                    status_text = "Status: 정지"
                 elif speed < 100:
-                    status_text = f"Status: SLOWDOWN ({speed}%)"
+                    status_text = f"Status: 감속 ({speed}%)"
                 else:
-                    status_text = "Status: RUNNING"
+                    status_text = "Status: 정상 운전"
 
                 risk_text = f"Risk: {current_risk_level}"
-                risk_color = (0, 0, 255) if current_risk_level in ["CRITICAL", "LOTO_RISK_DETECTED"] else ((0, 165, 255) if current_risk_level == "WARNING" else (0, 255, 0))
+                
+                # 표준 색상 팔레트 (BGR)
+                color_white = (255, 255, 255)
+                color_red = (79, 83, 217)      # #d9534f
+                color_orange = (78, 173, 240) # #f0ad4e
+                color_green = (92, 184, 92)     # #5cb85c
 
-                display_frame = put_text_korean(display_frame, mode_text, (15, 50), 22, (255, 255, 0))
-                display_frame = put_text_korean(display_frame, status_text, (15, 80), 22, (0, 255, 255))
+                if current_risk_level in ["CRITICAL", "LOTO_RISK_DETECTED"]:
+                    risk_color = color_red
+                elif current_risk_level == "WARNING":
+                    risk_color = color_orange
+                else:
+                    risk_color = color_green
+
+                display_frame = put_text_korean(display_frame, mode_text, (15, 50), 22, color_white)
+                display_frame = put_text_korean(display_frame, status_text, (15, 80), 22, color_white)
                 display_frame = put_text_korean(display_frame, risk_text, (15, 110), 22, risk_color)
 
                 # --- 실시간 상태 업데이트 메시지 생성 및 전송 ---

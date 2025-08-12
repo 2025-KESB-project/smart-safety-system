@@ -50,8 +50,14 @@ class RuleEngine:
 
         # 규칙 0: 비상 정지 조건 (모든 모드에서 최우선)
         if is_falling or has_sensor_alert:
-            reason = "falling_detected" if is_falling else "sensor_alert"
-            log_type = "LOG_CRITICAL_FALLING" if is_falling else "LOG_CRITICAL_SENSOR"
+            # 하드웨어 신호인 센서 경고를 최우선으로 판단
+            if has_sensor_alert:
+                reason = "sensor_alert"
+                log_type = "LOG_CRITICAL_SENSOR"
+            else: # 센서 경고가 없을 때만 넘어짐으로 판단
+                reason = "falling_detected"
+                log_type = "LOG_CRITICAL_FALLING"
+
             actions.append({"type": "POWER_OFF", "details": {"reason": reason}})
             actions.append({"type": "TRIGGER_ALARM_CRITICAL", "details": {"reason": reason}})
             # 시스템 잠금 액션 추가

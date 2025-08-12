@@ -9,10 +9,10 @@ export default function ConveyorMode({
 }) {
 
   const getStatusText = () => {
-    if (operationMode === 'AUTOMATIC') return '🟢 운전 모드';
-    if (operationMode === 'MAINTENANCE') return '🟠 정비 모드';
+    if (operationMode === 'AUTOMATIC') return <span style={{color: '#5cb85c', fontWeight: 'bold'}}>운전 모드</span>;
+    if (operationMode === 'MAINTENANCE') return <span style={{color: '#337ab7', fontWeight: 'bold'}}>정비 모드</span>;
     if (operationMode === null) return '불러오는 중...';
-    return '🔴 정지 상태';
+    return <span style={{color: '#d9534f', fontWeight: 'bold'}}>정지 상태</span>;
   };
 
   return (
