@@ -51,9 +51,11 @@ export default function Dashboard() {
   // 1. 스토어에서 모든 상태와 액션을 가져옵니다.
   const {
     logs, zones, operationMode, loading, error, popupError, globalAlert,
+    isLocked, // isLocked 상태 추가
     activeId, isDangerMode, configAction, newZoneName, selectedZoneId,
     wsStatus, currentTime,
     initialize, setActiveId, handleControl, 
+    resetSystem, // resetSystem 액션 추가
     enterDangerMode, exitDangerMode, setConfigAction, setSelectedZoneId,
     setNewZoneName, setImageSize, handleCreateZone, handleUpdateZone, handleDeleteZone,
     setPopupError, testLotoCondition // 디버깅용 액션 가져오기
@@ -137,9 +139,23 @@ export default function Dashboard() {
 
         {/* 제어 및 로그 패널 (우측) */}
         <div className="control-panel">
-          {loading ? <div className="loading">로딩 중…</div> :
-           error ? <div className="error">{error}</div> :
-           !isDangerMode ? (
+          {isLocked ? (
+            <div className="system-locked-panel">
+              <div className="system-locked-title">SYSTEM LOCKED</div>
+              <p className="system-locked-message">치명적인 위험이 감지되어 시스템이 비상 정지되었습니다. 관리자의 확인 후 시스템을 리셋하세요.</p>
+              <button 
+                className="system-reset-btn"
+                onClick={resetSystem}
+                disabled={loading}
+              >
+                {loading ? '리셋 중...' : '🚨 시스템 리셋'}
+              </button>
+            </div>
+          ) : loading ? (
+            <div className="loading">로딩 중…</div>
+          ) : error ? (
+            <div className="error">{error}</div>
+          ) : !isDangerMode ? (
             <>
               {/* 긴급 대응 영역 */}
               <div className="emergency-response-panel">

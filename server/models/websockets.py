@@ -55,6 +55,7 @@ class StatusUpdateMessage(BaseModel):
     conveyor_status: str = Field(..., description="컨베이어 물리적 상태", examples=["RUNNING", "STOPPED", "SLOWDOWN"])
     conveyor_speed: int = Field(..., description="컨베이어 속도 (%)", examples=[100, 50, 0])
     risk_level: str = Field(..., description="현재 감지된 위험 수준", examples=["SAFE", "WARNING", "CRITICAL", "LOTO_RISK_DETECTED"])
+    is_locked: bool = Field(..., description="시스템 잠금 상태", examples=[False, True])
 
     class Config:
         json_schema_extra = {
