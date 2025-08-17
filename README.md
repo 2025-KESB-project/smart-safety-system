@@ -1,310 +1,362 @@
-# 🤖 Smart Safety System
-## 컨베이어벨트 안전 관리 시스템
+# 🛡️ 컨베이어 가드 (Conveyor Guard)
 
-AI 기반의 실시간 안전 모니터링 및 자동 제어 시스템으로, YOLOv8과 MediaPipe를 활용하여 작업자의 안전을 보호합니다.
+## AI 기반 디지털 LOTO 산업재해 안전 시스템
 
-## 📋 목차
-- [개요](#개요)
-- [주요 기능](#주요-기능)
-- [시스템 구조](#시스템-구조)
-- [설치 및 실행](#설치-및-실행)
-- [API 문서](#api-문서)
-- [사용법](#사용법)
-- [개발 가이드](#개발-가이드)
-- [라이선스](#라이선스)
-
-## 🎯 개요
-
-Smart Safety System은 다음과 같은 6계층 구조로 구성된 종합적인 안전 관리 시스템입니다:
-
-1. **입력 계층 (Input Layer)**: CCTV, 웹캠, 산업용 카메라를 통한 실시간 영상 수집
-2. **감지 계층 (Detect Layer)**: YOLOv8 기반 객체 감지 및 MediaPipe 포즈 분석
-3. **판단 계층 (Logic Layer)**: 위험도 평가 및 작업 모드 자동 전환
-4. **제어 계층 (Control Layer)**: GPIO를 통한 하드웨어 제어 및 알림 시스템
-5. **UI 계층**: FastAPI 기반 웹 대시보드 및 WebSocket 실시간 통신
-6. **데이터 계층**: 감지 이력, 위험도 평가, 알림 로그 저장
-
-## ✨ 주요 기능
-
-### 🔍 실시간 객체 감지
-- **YOLOv8**: 사람, 손, 얼굴, PPE(보호장비) 등 실시간 감지
-- **MediaPipe**: 자세 분석 및 이상 행동 감지 (넘어짐, 주저앉음 등)
-- **손 제스처 인식**: 정지 신호, 집는 동작 등 제스처 기반 제어
-
-### ⚙️ 지능형 작업 모드
-- **정형 작업 모드**: 일반적인 안전한 작업 환경
-- **비정형 작업 모드**: 위험 요소가 있는 작업 환경
-- **안전 모드**: 높은 위험도 감지 시 자동 전환
-- **비상 정지 모드**: 긴급 상황 시 즉시 시스템 정지
-
-### 🎮 자동 제어 시스템
-- **전원 제어**: 위험도에 따른 자동 전원 차단
-- **속도 제어**: 컨베이어벨트 속도 자동 조절
-- **알림 시스템**: 시각적(경광등), 음향(부저), 텍스트 알림
-
-### 📊 실시간 모니터링
-- **웹 대시보드**: 실시간 상태 확인 및 제어
-- **WebSocket**: 실시간 데이터 스트리밍
-- **REST API**: 시스템 상태 조회 및 제어 명령
-
-## 🏗️ 시스템 구조
-
-```
-smart-safety-system/
-├── 📁 input_adapter/          # 입력 계층
-│   ├── adapter.py            # 입력 어댑터 메인 클래스
-│   ├── stream.py             # 비디오 스트림 처리
-│   ├── preprocess.py         # 영상 전처리
-│   └── sensor.py             # 센서 데이터 처리
-├── 📁 detect/                # 감지 계층
-│   ├── detector.py           # YOLOv8 객체 감지
-│   ├── person_detect.py      # 사람 감지
-│   ├── pose_detector.py      # 자세 분석
-│   └── hand_gesture_detector.py # 손 제스처 인식
-├── 📁 logic/                 # 판단 계층
-│   ├── mode_manager.py       # 작업 모드 관리
-│   ├── risk_evaluator.py     # 위험도 평가
-│   └── rule_engine.py        # 규칙 엔진
-├── 📁 control/               # 제어 계층
-│   ├── power_controller.py   # 전원 제어
-│   ├── speed_controller.py   # 속도 제어
-│   ├── alert_controller.py   # 알림 제어
-│   └── warning_device.py     # 경고 장치
-├── 📁 server/                # UI 계층
-│   ├── app.py               # FastAPI 서버
-│   ├── config.py            # 서버 설정
-│   └── routes/              # API 라우트
-├── 📁 frontend/              # 프론트엔드
-│   └── src/                 # React/Vue.js 소스
-├── 📁 docs/                  # 문서
-├── main.py                   # 메인 실행 파일
-├── config.py                 # 전역 설정
-└── requirements.txt          # 의존성 패키지
-```
-
-## 🚀 설치 및 실행
-
-### 1. 시스템 요구사항
-- **Python**: 3.8 이상
-- **OS**: Linux (Ubuntu 20.04+), macOS, Windows
-- **하드웨어**: Raspberry Pi 4 (권장) 또는 x86 PC
-- **카메라**: USB 웹캠 또는 IP 카메라
-- **GPIO**: Raspberry Pi GPIO (선택사항)
-
-### 2. 설치
-
-```bash
-# 저장소 클론
-git clone https://github.com/your-username/smart-safety-system.git
-cd smart-safety-system
-
-# 가상환경 생성 (권장)
-python -m venv venv
-source venv/bin/activate  # Linux/macOS
-# venv\Scripts\activate   # Windows
-
-# 의존성 설치
-pip install -r requirements.txt
-
-# YOLOv8 모델 다운로드 (자동으로 다운로드됨)
-python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
-```
-
-### 3. 실행
-
-#### 기본 실행
-```bash
-python main.py
-```
-
-#### 옵션과 함께 실행
-```bash
-# 모의 모드로 실행 (하드웨어 없이)
-python main.py --mock
-
-# 디버그 모드로 실행
-python main.py --debug
-
-# 웹 서버만 실행
-cd server
-python app.py
-```
-
-### 4. 웹 대시보드 접속
-- **URL**: http://localhost:8000
-- **API 문서**: http://localhost:8000/docs
-- **WebSocket**: ws://localhost:8000/ws
-
-## 📚 API 문서
-
-### 주요 엔드포인트
-
-#### 시스템 상태
-```http
-GET /status
-GET /api/detection?limit=10
-GET /api/mode
-GET /api/risk
-GET /api/control
-```
-
-#### 제어 명령
-```http
-POST /api/mode/change?mode=safe&reason=위험감지
-POST /api/control/power?action=emergency
-POST /api/control/alert?level=critical&message=긴급상황
-```
-
-#### WebSocket 실시간 데이터
-```javascript
-const ws = new WebSocket('ws://localhost:8000/ws');
-ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    console.log('실시간 데이터:', data);
-};
-```
-
-## 🎮 사용법
-
-### 1. 시스템 시작
-```bash
-# 기본 모드로 시작
-python main.py
-
-# 모의 모드로 시작 (개발/테스트용)
-python main.py --mock
-```
-
-### 2. 웹 대시보드 사용
-1. 브라우저에서 `http://localhost:8000` 접속
-2. 실시간 상태 모니터링
-3. 작업 모드 수동 전환
-4. 제어 명령 실행
-
-### 3. API 사용 예제
-```python
-import requests
-
-# 시스템 상태 조회
-response = requests.get('http://localhost:8000/status')
-status = response.json()
-
-# 안전 모드로 전환
-requests.post('http://localhost:8000/api/mode/change', 
-              params={'mode': 'safe', 'reason': '수동 전환'})
-
-# 비상 정지
-requests.post('http://localhost:8000/api/control/power', 
-              params={'action': 'emergency'})
-```
-
-### 4. 설정 변경
-```python
-# config.py에서 설정 수정
-CAMERA_INDEX = 0          # 카메라 인덱스
-CONFIDENCE_THRESHOLD = 0.5 # 감지 신뢰도 임계값
-GPIO_POWER_CONTROL = 18   # 전원 제어 GPIO 핀
-```
-
-## 🔧 개발 가이드
-
-### 1. 새로운 감지 기능 추가
-```python
-# detect/custom_detector.py
-class CustomDetector:
-    def detect(self, frame):
-        # 커스텀 감지 로직
-        return detection_result
-```
-
-### 2. 새로운 제어 기능 추가
-```python
-# control/custom_controller.py
-class CustomController:
-    def control(self, command):
-        # 커스텀 제어 로직
-        pass
-```
-
-### 3. 새로운 알림 타입 추가
-```python
-# control/alert_controller.py
-def _send_custom_alert(self, alert):
-    # 커스텀 알림 로직
-    pass
-```
-
-### 4. 테스트 실행
-```bash
-# 단위 테스트
-python -m pytest tests/
-
-# 통합 테스트
-python -m pytest tests/integration/
-
-# 성능 테스트
-python tests/performance_test.py
-```
-
-## 🛠️ 기술 스택
-
-### Backend
-- **Python 3.8+**: 메인 프로그래밍 언어
-- **FastAPI**: 고성능 웹 프레임워크
-- **OpenCV**: 컴퓨터 비전 라이브러리
-- **YOLOv8**: 실시간 객체 감지
-- **MediaPipe**: 포즈 및 제스처 인식
-- **SQLAlchemy**: 데이터베이스 ORM
-
-### Frontend
-- **React/Vue.js**: 웹 프론트엔드
-- **WebSocket**: 실시간 통신
-- **Chart.js**: 데이터 시각화
-
-### Hardware
-- **Raspberry Pi GPIO**: 하드웨어 제어
-- **USB Camera**: 영상 입력
-- **LED/부저**: 시각/음향 알림
-
-## 📊 성능 지표
-
-- **감지 속도**: 30 FPS (640x480 해상도)
-- **정확도**: 95% 이상 (표준 테스트 환경)
-- **응답 시간**: < 100ms (위험 감지부터 제어까지)
-- **가동률**: 99.9% (24/7 운영)
-
-## 🔒 보안
-
-- **인증**: JWT 토큰 기반 인증
-- **권한**: 역할 기반 접근 제어 (RBAC)
-- **암호화**: HTTPS/TLS 통신
-- **로깅**: 보안 이벤트 로깅
-
-## 📝 라이선스
-
-이 프로젝트는 MIT 라이선스 하에 배포됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
-
-## 🤝 기여하기
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📞 지원
-
-- **이슈 리포트**: [GitHub Issues](https://github.com/your-username/smart-safety-system/issues)
-- **문서**: [Wiki](https://github.com/your-username/smart-safety-system/wiki)
-- **이메일**: support@smartsafety.com
-
-## 🙏 감사의 말
-
-- [Ultralytics](https://github.com/ultralytics/ultralytics) - YOLOv8
-- [MediaPipe](https://mediapipe.dev/) - 포즈 및 제스처 인식
-- [FastAPI](https://fastapi.tiangolo.com/) - 웹 프레임워크
-- [OpenCV](https://opencv.org/) - 컴퓨터 비전 라이브러리
+> **"작업자의 생명을 지키는 지능형 수호자"**
+> 기존 CCTV 인프라를 활용한 저비용 고효율의 스마트 안전 관리 시스템
 
 ---
 
-**⚠️ 주의사항**: 이 시스템은 안전 관리 보조 도구입니다. 실제 산업 환경에서 사용하기 전에 충분한 테스트와 검증이 필요합니다.
+## 📋 목차
+
+- [프로젝트 개요](#-프로젝트-개요)
+- [프로젝트 배경](#-프로젝트-배경)
+- [핵심 목표 및 특징](#-핵심-목표-및-특징)
+- [시스템 아키텍처](#️-시스템-아키텍처)
+- [팀 구성 및 역할](#-팀-구성-및-역할)
+- [개발 현황](#-개발-현황)
+- [기술 스택](#-기술-스택)
+- [설치 및 실행](#-설치-및-실행)
+- [성과 지표](#-성과-지표)
+- [데모 및 자료](#-데모-및-자료)
+
+---
+
+## 🎯 프로젝트 개요
+
+### 프로젝트명: 컨베이어 가드
+
+**컨베이어 가드(Conveyor Guard)**는 컨베이어 벨트 작업 현장의 위험으로부터 작업자를 지키는 '수호자(Guard)' 역할을 하는 시스템이라는 정체성을 직관적으로 표현한 이름입니다. 이 시스템은 중소기업 제조 현장에서 빈번하게 발생하는 끼임 사고를 예방하기 위해, AI 기술과 IoT를 결합한 혁신적인 디지털 안전 관리 솔루션입니다.
+
+### 팀명: 28일 후
+
+**28일 후**는 동명의 영화에서 착안한 팀명으로, 두 가지 깊은 의미를 담고 있습니다. 첫째, 어떤 어려움에도 굴하지 않고 끈질기게 다시 일어서는 '좀비 같은 회복력'을 강조합니다. 둘째, 끊임없는 노력으로 '28일 후에는 어제보다 더 나은 우리가 되자'는 자기 계발과 성장에 대한 의지를 담고 있습니다.
+
+### 프로젝트 기본 정보
+
+- **개발 기간**: 2025년 7월 1일 ~ 8월 28일 (총 8주)
+- **분야**: 스마트 팩토리 / 산업 안전 관리
+- **대상**: 50인 미만 중소 제조 사업장, 물류 센터 등 컨베이어 라인 공정
+- **GitHub**: https://github.com/2025-KESB-project/smart-safety-system
+- **시연 영상**: https://youtu.be/Ow8l0YTGcaQ
+
+---
+
+## 🚨 프로젝트 배경
+
+### 끼임 사고의 심각성
+
+국내 산업재해 현황을 살펴보면, 매년 800~900명의 근로자가 산업재해로 소중한 생명을 잃고 있습니다. 특히 **끼임 사고**는 전체 사망사고 중 두 번째로 높은 비중을 차지하며, 다른 사고 유형과 달리 지난 10년간 감소 추세를 보이지 않고 있어 고질적인 문제로 남아있습니다.
+
+### 중소기업의 취약한 안전 환경
+
+더욱 심각한 것은 **산업재해 사망사고의 80% 이상이 50인 미만의 중소기업에서 발생**한다는 점입니다. 컨베이어 관련 사고만 살펴봐도 78%가 50인 미만 사업장에서 발생하며, 이 중 83%가 단독 작업 중에 일어나고 있습니다. 중소기업은 기술적, 제도적 안전 관리의 사각지대에 놓여 있으며, 고비용의 안전 시스템 도입은 현실적으로 어려운 상황입니다.
+
+### 비정형 작업의 높은 위험성
+
+컨베이어 관련 끼임 사고를 분석한 결과, 정상 가동 중인 '정형 작업' 시보다 **정비, 청소, 보수 등 '비정형 작업' 중에 사고가 더 자주 발생**하는 것으로 나타났습니다. 실제로 제조업 끼임 사망사고의 54%가 비정형 작업 중에 발생하며, 이는 현행 안전 관리 시스템의 구조적 한계를 보여줍니다.
+
+### LOTO 시스템의 한계
+
+현재 산업 현장에서는 **LOTO(Lock Out Tag Out)** 시스템을 통해 이러한 사고를 예방하고 있습니다. 하지만 아날로그 방식의 LOTO는 작업자의 의식적 행동과 개인 판단에 전적으로 의존하는 구조적 한계를 가지고 있습니다. 실제로 컨베이어 관련 사고 사망 원인의 **82%가 LOTO 미실시**에서 발생하고 있어, 보다 지능적이고 자동화된 안전 시스템의 필요성이 대두되고 있습니다.
+
+---
+
+## 💡 핵심 목표 및 특징
+
+### 주요 목표
+
+우리 프로젝트는 **중소기업에서 즉시 적용 가능하며 비용 부담이 적은 디지털 LOTO 산업재해 안전 솔루션**을 개발하는 것을 목표로 합니다. 구체적으로는 제조업 끼임 사고의 54%를 차지하는 **비정형 작업 사고 감소율 30% 달성**을 목표로 설정했습니다.
+
+### 핵심 특징
+
+#### 🏭 기존 인프라 최대 활용
+
+새로운 설비 투자 없이 **공장에 이미 설치된 CCTV를 그대로 활용**합니다. AI 기반 실시간 영상 추론을 현장 PC에서 직접 수행하여 네트워크 부하와 보안 취약점을 최소화하며, 초기 도입 비용과 운영 부담을 획기적으로 절감합니다.
+
+#### 🤖 AI 기반 지능형 감지
+
+YOLOv8을 활용한 **인공지능 기반 영상 데이터 분석**을 통해 작업자의 위치, 자세(웅크림, 넘어짐 등) 등 사람의 복합적인 상태를 정밀하게 실시간으로 감지합니다.
+
+#### 🔒 완전 자동화된 디지털 LOTO
+
+기존 아날로그 LOTO의 작업자 의존성 문제를 해결하기 위해 **완전히 자동화된 디지털 LOTO 시스템**을 구현했습니다. 위험도가 높은 비정형 작업 시 인체가 위험 구역 내에서 감지되면, 해당 설비의 전원을 즉시 차단하거나 작동을 제한하는 '하드 가드' 기능으로 끼임 사고를 미연에 방지합니다.
+
+#### ⚡ 실시간 제어 및 모니터링
+
+위험 감지부터 제어까지의 **End-to-End 응답 시간 150ms 이내**를 목표로 하며, 생산성 저하 없이 안전성을 높이는 실시간 제어를 통해 생산성과 안전의 균형을 확보합니다.
+
+---
+
+## 🏗️ 시스템 아키텍처
+
+### 전체 시스템 구조
+
+컨베이어 가드는 50인 미만 중소기업을 대상으로 최대의 안전 효과를 제공하기 위해 **공장 현장 서버**와 **안전 관리 서버**로 구분된 이중 서버 아키텍처를 채택했습니다.
+
+### 🏭 공장 현장 서버 (Vision Worker)
+
+현장에 설치되는 **현장 안전 PC**가 24시간 현장을 감시하고 위험을 판단하는 독립적인 AI 두뇌 역할을 수행합니다. 4단계 처리 프로세스를 통해 실시간 안전 관리를 구현합니다:
+
+#### 1단계: 수집 (Collection Layer)
+
+- OpenCV를 통한 CCTV/웹캠/산업용 카메라 실시간 영상 수집
+- Arduino 연결 센서(PIR, 접촉 스위치 등) 데이터 시리얼 통신 수신
+- YOLOv8 최적 입력을 위한 영상 전처리 (리사이즈, 정규화)
+
+#### 2단계: 감지 (Perception Layer)
+
+- YOLOv8 기반 실시간 인체 감지 및 바운딩 박스 추출
+- 학습된 YOLO 모델을 활용한 작업자 넘어짐 감지
+- 사전 정의된 위험 구역과 탐지 좌표 매핑을 통한 위험 구역 진입 감지
+
+#### 3단계: 규칙 (Rule Layer)
+
+- 탐지 결과를 종합한 위험도 등급 분류 (SAFE/MEDIUM/HIGH/CRITICAL)
+- 규칙 엔진 기반 상황별 대응 로직:
+  - `정비모드 + 위험구역 내 사람 감지 → CRITICAL`
+  - `작업자 넘어짐 감지 → HIGH`
+  - `운전모드 + 위험구역 내 사람 감지 → MEDIUM`
+- 등급별 제어 명령 리스트 자동 생성
+
+#### 4단계: 제어 (Control Layer)
+
+- 규칙 엔진 명령의 시리얼 통신 프로토콜 변환
+- Arduino MCU를 통한 릴레이/모터 드라이버 물리적 제어 실행
+
+### 🖥️ 안전 관리 서버 (Central Management)
+
+여러 현장의 데이터를 통합 관리하는 중앙 허브 기능을 제공합니다:
+
+#### 사용자 인터페이스
+
+- 실시간 CCTV 영상 중계 및 시스템 상태 표시
+- 직관적인 운전/정비 모드 전환 인터페이스
+- 마우스 클릭으로 손쉬운 위험 구역 동적 설정/변경
+
+#### 웹 서버 (FastAPI 기반)
+
+- **API 라우터**: HTTP/WebSocket 요청 수신 및 내부 로직 연결
+- **DB 서비스**: 이벤트 로그, 위험 구역 설정 등 데이터 저장/조회 (Firestore)
+- **메시지 큐 매니저**: 현장 서버와의 양방향 실시간 명령/데이터 중계
+
+---
+
+## 👥 팀 구성 및 역할
+
+### 팀 구성원
+
+| 이름             | 역할              | 주요 담당 업무                                                                                                |
+| ---------------- | ----------------- | ------------------------------------------------------------------------------------------------------------- |
+| **조수민** | PM, Backend       | 프로젝트 관리, 백엔드 시스템 아키텍처 설계, FastAPI 서버 개발, Firestore DB 설계 및 관리, 시스템 통합 및 배포 |
+| **박영민** | Backend, Hardware | 제어 계층 개발, 컨베이어벨트 하드웨어 제작 및 조립, Arduino 센서 연동 개발, 시스템 보고서 작성                |
+| **이승빈** | Frontend          | 프론트엔드 시스템 디자인, UI/UX 설계, 데이터 시각화 구현, 컨베이어벨트 CAD 설계                               |
+| **김서영** | Frontend, Backend | 프론트엔드 개발, Canvas 기반 위험구역 설정 기능 구현, 프레젠테이션 자료 작성                                  |
+
+### 협업 방식
+
+프로젝트의 체계적 진행을 위해 **Notion 기반 WBS(Work Breakdown Structure)**를 구축하여 역할과 책임을 명확히 분담했습니다. 매일 아침 주간 회의를 통해 진척도를 점검하고, 각 Task별로 목적(Object), 학습점(Lesson Learned), 결과(Result)를 체계적으로 기록하며 팀 간 협업을 원활하게 유지했습니다.
+
+---
+
+## 📈 개발 현황
+
+### 개발 일정 (8주간)
+
+| 주차                        | 주요 활동                | 핵심 성과                                 |
+| --------------------------- | ------------------------ | ----------------------------------------- |
+| **1주차** (7/1~7/4)   | 팀 구성 및 프로젝트 기획 | 산업 사고 사례 조사, 시스템 흐름도 초안   |
+| **2주차** (7/7~7/11)  | 핵심 기술 정의           | YOLO/OpenCV 프로토타입, 아키텍처 설계     |
+| **3주차** (7/14~7/18) | 시스템 아키텍처 설계     | 5-Layer 아키텍처 확정, UI 초안 설계       |
+| **4주차** (7/21~7/25) | API 및 실시간 통신 구현  | FastAPI 서버, Arduino 시리얼 통신 구현    |
+| **5주차** (7/28~8/1)  | 제어 계층 리팩토링       | DI 구조 확립, 서버 이중화, WebSocket 구현 |
+| **6주차** (8/4~8/8)   | 통합 테스트              | DeadLock 문제 해결, 하드웨어 통합 테스트  |
+| **7주차** (8/11~8/15) | 최종 완성 및 테스트      | 성능 최적화, 시제품 완성, 시연 영상 제작  |
+
+### 주요 성과
+
+- ✅ **실시간 위험 탐지**: YOLOv8 기반 인체 감지 및 넘어짐 감지 구현
+- ✅ **디지털 LOTO**: 완전 자동화된 안전 잠금 시스템 구현
+- ✅ **이중화 안전장치**: 소프트웨어-하드웨어 연계 + 하드웨어 독립 Fail-Safe
+- ✅ **실시간 웹 대시보드**: WebSocket 기반 실시간 모니터링 및 제어
+- ✅ **하드웨어 프로토타입**: 30cm×60cm×15cm 실물 컨베이어 시스템 제작
+
+---
+
+## 🛠️ 기술 스택
+
+### Backend 기술
+
+- **Python 3.8+**: 메인 개발 언어
+- **FastAPI**: 고성능 비동기 웹 프레임워크
+- **YOLOv8**: 실시간 객체 감지 AI 모델
+- **OpenCV**: 컴퓨터 비전 및 영상 처리
+- **WebSocket**: 실시간 양방향 통신
+- **Serial Communication**: Arduino와의 하드웨어 제어 통신
+
+### Frontend 기술
+
+- **JavaScript (React)**: 사용자 인터페이스 개발
+- **Canvas API**: 동적 위험구역 설정 기능
+- **WebSocket**: 실시간 데이터 수신 및 표시
+- **Chart.js**: 데이터 시각화 및 모니터링 대시보드
+
+### Hardware 및 IoT
+
+- **C++ (Arduino)**: 마이크로컨트롤러 펌웨어
+- **Arduino MCU**: 중앙 제어 장치
+- **릴레이 모듈**: 전원 차단 제어
+- **모터 드라이버**: 컨베이어 속도 제어
+- **IR 센서**: 물체 감지 및 Fail-Safe 기능
+
+### Database 및 클라우드
+
+- **Google Firestore**: NoSQL 클라우드 데이터베이스
+- **실시간 데이터 동기화**: 이벤트 로그 및 설정 데이터 관리
+
+### 개발 환경
+
+- **PyCharm, VSCode**: 통합 개발 환경
+- **GitHub**: 버전 관리 및 협업
+- **Notion**: 프로젝트 관리 및 문서화
+
+---
+
+## 🚀 설치 및 실행
+
+### 시스템 요구사항
+
+- **Python**: 3.8 이상
+- **Hardware**: Arduino 호환 보드, 웹캠/IP카메라
+- **OS**: Windows, macOS, Linux (Ubuntu 권장)
+- **GPU**: NVIDIA GPU (선택사항, 성능 향상)
+
+### 설치 방법
+
+```bash
+# 저장소 클론
+git clone https://github.com/2025-KESB-project/smart-safety-system.git
+cd smart-safety-system
+
+# 가상환경 생성 및 활성화
+python -m venv venv
+source venv/bin/activate  # Linux/macOS
+# 또는 venv\Scripts\activate  # Windows
+
+# 의존성 패키지 설치
+pip install -r requirements.txt
+
+# YOLOv8 모델 다운로드
+python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+```
+
+### 실행 방법
+
+```bash
+# 공장 현장 서버 (Vision Worker) 실행
+python vision_worker.py
+
+# 안전 관리 서버 실행
+python main_server.py
+
+# 웹 대시보드 접속
+# http://localhost:8000 에서 실시간 모니터링 가능
+```
+
+### 하드웨어 설정
+
+Arduino 보드에 제공된 펌웨어를 업로드하고, 센서 및 제어 모듈을 연결 가이드에 따라 설치합니다. 자세한 하드웨어 설정은 `docs/hardware_setup.md`를 참조하세요.
+
+---
+
+## 📊 성과 지표
+
+### 목표 KPI
+
+- **위험 상황 감지 정확도**: 95% 이상
+- **End-to-End 응답 시간**: 150ms 이내 (감지부터 제어까지)
+- **시스템 안정성**: 99.9% (24/7 운영 기준)
+- **비정형 작업 사고 감소율**: 30% 목표
+
+### 기술적 성능
+
+- **감지 속도**: 실시간 30 FPS 영상 처리
+- **AI 모델 정확도**: YOLOv8 기반 95% 이상 인체 감지
+- **응답성**: WebSocket 기반 실시간 상태 업데이트
+- **안정성**: 이중화 안전장치로 시스템 신뢰성 확보
+
+### 경제적 효과
+
+- **초기 도입 비용**: 기존 CCTV 활용으로 대폭 절감
+- **정부 지원 활용**: 스마트 안전장비 지원사업 80% 지원 가능
+- **투자 회수 기간**: 약 1.6년 예상 (사고 예방 효과 기준)
+
+---
+
+## 🎬 데모 및 자료
+
+### 시연 영상
+
+- **YouTube**: https://youtu.be/Ow8l0YTGcaQ
+- 실제 하드웨어 프로토타입과 웹 대시보드를 통한 전체 시스템 시연
+
+### 소스 코드
+
+- **GitHub Repository**: https://github.com/2025-KESB-project/smart-safety-system
+- 전체 소스 코드, 문서, 설치 가이드 제공
+
+### API 문서
+
+시스템 실행 후 `http://localhost:8000/docs`에서 자동 생성된 FastAPI 문서를 확인할 수 있습니다.
+
+#### 주요 엔드포인트
+
+```http
+# 시스템 제어
+POST /api/control/start_automatic    # 운전 모드 시작
+POST /api/control/start_maintenance  # 정비 모드 시작
+POST /api/control/stop               # 시스템 정지
+POST /api/control/reset              # 시스템 리셋
+
+# 데이터 조회
+GET /api/logs                        # 로그 기록 조회
+GET /api/zones                       # 위험 구역 설정 조회
+GET /status                          # 시스템 상태 확인
+
+# 실시간 통신
+WebSocket /ws/logs                   # 실시간 로그 스트림
+```
+
+---
+
+## 🤝 기여 및 지원
+
+### 기여하기
+
+1. 이 저장소를 Fork합니다
+2. 새로운 기능 브랜치를 생성합니다 (`git checkout -b feature/새로운기능`)
+3. 변경사항을 커밋합니다 (`git commit -am '새로운 기능 추가'`)
+4. 브랜치에 Push합니다 (`git push origin feature/새로운기능`)
+5. Pull Request를 생성합니다
+
+### 라이선스
+
+이 프로젝트는 MIT 라이선스 하에 배포됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
+
+### 연락처
+
+- **프로젝트 관리자**: 조수민
+- **GitHub Issues**: 버그 리포트 및 기능 요청
+- **이메일**: [프로젝트 관련 문의]
+
+---
+
+## 🏆 프로젝트 의의
+
+**컨베이어 가드**는 단순한 기술 구현을 넘어, 중소기업 제조 현장의 작업자 안전을 실질적으로 개선하고자 하는 사회적 가치를 추구합니다. 기존 인프라를 활용한 저비용 솔루션으로 그동안 안전 투자의 사각지대에 있던 중소기업에 실질적인 도움을 제공하며, AI 기술을 통해 산업 안전의 새로운 패러다임을 제시하고자 합니다.
+
+**"28일 후"** 팀의 회복력과 성장 의지로 완성된 이 프로젝트가, 작업자의 생명을 지키는 든든한 수호자 역할을 하기를 기대합니다.
+
+---
+
+**⚠️ 중요 안내**: 본 시스템은 안전 관리 보조 도구입니다. 실제 산업 현장 적용 전 충분한 테스트와 현장 맞춤 설정이 필요하며, 기존 안전 절차와 함께 사용하시기 바랍니다.
